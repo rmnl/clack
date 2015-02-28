@@ -1,4 +1,4 @@
-    # CLACK
+# CLACK
 
 Clack is a Command Line API Calling Kit based on [Click][1].
 
@@ -17,6 +17,12 @@ Clack works with the following API's
 ### On OS X
 
 On OS X you can download the disk image (_dmg file_) of [the latest release][lr] and install _clack_ more or less in the same way as you would usually install applications. The difference is that in Clack's case you will not be dragging the file to the `/Applications` folder but to the `/usr/local/bin` folder. In some cases you're not allowed to write in this directory and you will be asked for your administrator password. If you're already using [_homebrew_][hb] then you'll probably be able to write in this directory.
+
+### On Windows
+
+It should probably work when you have something like [Cygwin][cw] installed, but I have not tested it. Please let me know your experiences.
+
+[cw]: https://cygwin.com/
 
 ### Manual installation
 
