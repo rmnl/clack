@@ -1,4 +1,4 @@
-# CLACK
+    # CLACK
 
 Clack is a Command Line API Calling Kit based on [Click][1].
 
@@ -12,14 +12,23 @@ Clack works with the following API's
 
 [1]: http://click.pocoo.org/
 
-## Install
+## Installation
 
-Copy the `clack` file to your path and make sure the file is executable.
+### On OS X
+
+On OS X you can download the disk image (_dmg file_) of [the latest release][lr] and install _clack_ more or less in the same way as you would usually install applications. The difference is that in Clack's case you will not be dragging the file to the `/Applications` folder but to the `/usr/local/bin` folder. In some cases you're not allowed to write in this directory and you will be asked for your administrator password. If you're already using [_homebrew_][hb] then you'll probably be able to write in this directory.
+
+### Manual installation
+
+Download the _zip file_ of [the latest release][lr], unzip it and copy the unzipped `clack` file to a location on your path and make sure the file is executable.
 
 ```bash
 cp clack /usr/local/bin/
 chmod u+x /usr/local/bin/clack
 ```
+
+[lr]: https://github.com/rmnl/clack/releases
+[hb]: http://brew.sh/
 
 ## Usage
 
