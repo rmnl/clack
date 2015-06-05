@@ -24,6 +24,7 @@ pip install clack-cli
 ```
 
 
+
 ## Usage
 
 Simply run `clack` in your terminal to see more info.
@@ -87,6 +88,32 @@ By default the first configuration is the default, but a lot of times you will b
 ## Short commands
 
 You can abbreviate all the subcommands as much as you like as long as it will match one subcommand only. At this moment all subcommands begin with a different letter and this means you can use the first letter of the command only. E.g. Listing all your environments is simply `clack l`, making an API call will be `clack c`.
+
+## Batch Calls
+
+Clack 0.3.0 introduces the `clack batch` command which allows you to make batch calls to the api with input from a csv file. The basic usage is like this.
+
+``` bash
+clack batch /some/dir/input.csv /accounts/update "{'account_key': '<<account_key>>', 'storage_limit': '<<new_limit>>'}"
+```
+
+With this command the csv file would have content like this:
+
+| account_key | new_limit | unused_column | 
+| ----------- | --------- | ------------- | 
+| qweRTY      | 1000000   | foo           | 
+| ASDfgh      | 5000000   | bar           | 
+
+This means the csv file **must have a header row**. The names of the columns in the header row will be used for replacing the parameter string template with values. 
+
+In the above example the `<<account_key>>` will be replaced by the value of the account_key in the row. The above csv would result in the following regular api calls with clack.
+
+``` bash
+clack call /accounts/update "{'account_key': 'qweRTY', 'storage_limit': '1000000'}"
+clack call /accounts/update "{'account_key': 'ASDfgh', 'storage_limit': '5000000'}"
+```
+
+As you can see the *unused_column* is ignored.
 
 ## Environment Variables
 
