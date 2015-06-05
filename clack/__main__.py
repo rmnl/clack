@@ -1,13 +1,17 @@
 # -*- coding: utf-8 -*-
 
 import ast
+import calendar
 import ConfigParser
+import csv
+import hashlib
 import json
 import os
 import pprint
 import re
 import shutil
 import textwrap
+import time
 
 from contrib import click
 from contrib import botrlib
@@ -23,6 +27,8 @@ DEFAULTS = {
     'port': None,
     'method': 'POST',
 }
+DELEGATE_LOGIN_URL = '/delegate_login/'
+
 QUIET = False
 VERSION = '0.2'
 
@@ -113,31 +119,38 @@ def edit_environment(config, update=None, *args, **kwargs):
     return config
 
 
-def call_ac1(key, secret, host, apicall, params):
+def call_ac1(key, secret, host, apicall, params, show_output=True):
     api = API(key, secret, host=host)
     params['api_format'] = 'json'
     resp = api.call(apicall, params)
     try:
         resp = json.loads(resp)
-        pprint.pprint(resp, indent=4)
-        if not resp['status'] == 'success':
-            e("\nCALL FAILED PLEASE CHECK OUTPUT ABOVE!")
+        if show_output:
+            pprint.pprint(resp, indent=4)
+        if resp['status'] == 'success':
+            return True
+        else:
+            e("\nCALL FAILED PLEASE CHECK OUTPUT ABOVE!", force=show_output)
+            return False
     except ValueError:
-        e("%s" % resp, force=True)
+        e("%s" % resp, force=show_output)
 
 
-def call_ac2(key, secret, host, apicall, method, params):
+def call_ac2(key, secret, host, apicall, method, params, show_output=True):
     apicall = "/v2/%s" % apicall
     api = UnifiedAPI(key, secret, host=host)
     resp = api.call(apicall, method, params)
     try:
         resp = json.loads(resp)
-        pprint.pprint(resp, indent=4)
+        if show_output:
+            pprint.pprint(resp, indent=4)
+        return True
     except ValueError:
-        e("%s" % resp, force=True)
+        e("%s" % resp, force=show_output)
+        return False
 
 
-def call_ms1(key, secret, host, port, apicall, params):
+def call_ms1(key, secret, host, port, apicall, params, show_output=True):
     msa = botrlib.Client(
         key,
         secret,
@@ -148,11 +161,16 @@ def call_ms1(key, secret, host, port, apicall, params):
     )
     resp = msa.request(apicall, params)
     if params['api_format'] == 'py':
-        pprint.pprint(resp, indent=4)
-        if not resp['status'] == 'ok':
+        if show_output:
+            pprint.pprint(resp, indent=4)
+        if resp['status'] == 'ok':
+            return True
+        else:
+            return False
             e("\nCALL FAILED PLEASE CHECK OUTPUT ABOVE!")
     else:
-        e("%s" % resp, force=True)
+        e("%s" % resp, force=show_output)
+        return True
 
 
 def config_path():
@@ -233,6 +251,12 @@ def read_config():
 def save_config(config):
     with open(config_path(), 'wb') as cfp:
         config.write(cfp)
+
+
+def unicode_csv_reader(utf8_data, dialect=csv.excel, **kwargs):
+    csv_reader = csv.reader(utf8_data, dialect=dialect, **kwargs)
+    for row in csv_reader:
+        yield [unicode(cell, 'utf-8') for cell in row]
 
 
 def user_input(question, default=None, regex=None, error=None, wrap=True):
@@ -340,9 +364,98 @@ clack.add_command(add)
 @click.argument('params', required=False)
 def call(apicall=None, params=None, *args, **kwargs):
     global QUIET
-    config = read_config()
-    env = kwargs.get('env', 'default')
     QUIET = kwargs.get('quiet', False)
+    config = read_config()
+    return _call(config, apicall, params, *args, **kwargs)
+
+clack.add_command(call)
+
+
+@click.command(help="Make a batch of api calls.")
+@click.option(
+    '--env', '-e',
+    default="default",
+    metavar="ENVIRONMENT",
+    help='Choose your environment',
+)
+@click.option(
+    '--api', '-a',
+    help='Choose the api you want to make calls to',
+    type=click.Choice(['ms1', 'ac1', 'ac2']),
+    envvar='CLACK_API',
+)
+@click.option(
+    '--key', '-k',
+    help='Set a custom key for API Calls',
+    metavar='KEY',
+    envvar='CLACK_KEY',
+)
+@click.option(
+    '--secret', '-s',
+    help='Set a custom secret for API Calls',
+    metavar='SECRET',
+    envvar='CLACK_SECRET',
+)
+@click.option(
+    '--host', '-h',
+    help='Set a custom host for making API Calls',
+    metavar='HOSTNAME',
+    envvar='CLACK_HOST',
+)
+@click.option(
+    '--method', '-m',
+    help="Choose the HTTP method for your call. "
+    "(Only works with ac2 api calls)",
+    envvar='CLACK_METHOD',
+    default='post',
+    type=click.Choice(['delete', 'get', 'post', 'put'])
+)
+@click.option(
+    '--verbose', '-v',
+    help="Make the output more verbose and return the complete response of "
+    "each API call. By default only a success status will be returned.",
+    is_flag=True,
+)
+@click.option(
+    '--dry-run',
+    help='Do all but making the actual call',
+    is_flag=True,
+)
+@click.argument(
+    'csvfile',
+    required=True,
+    type=click.File(encoding='utf-8')
+)
+@click.argument('apicall', required=True)
+@click.argument('params', required=True)
+def batch(csvfile=None, apicall=None, params=None, *args, **kwargs):
+    global QUIET
+    QUIET = not kwargs.get('verbose', False)
+    config = read_config()
+    variables = re.findall(r'(<<(\w+)>>)', params)
+    table = unicode_csv_reader(csvfile)
+    header = []
+    for columns in table:
+        if not header:
+            header = columns
+            continue
+        prms = params
+        values = {}
+        for i, val in enumerate(columns):
+            values[header[i]] = val
+        for search_for, name in variables:
+            replace_with = values.get(name, False)
+            if replace_with:
+                prms = prms.replace(search_for, replace_with)
+        ok = _call(config, apicall, prms, True, *args, **kwargs)
+        ok = 'ok   ' if ok else 'error'
+        e("- %s: %s" % (ok, prms), force=True)
+
+clack.add_command(batch)
+
+
+def _call(config, apicall=None, params=None, resp=False, *args, **kwargs):
+    env = kwargs.get('env', 'default')
 
     if env == 'default':
         try:
@@ -410,18 +523,20 @@ def call(apicall=None, params=None, *args, **kwargs):
         e("Only doing a dry run. Exiting now", force=True)
         return
 
+    verbose = kwargs.get('verbose', True)
     if api == 'ac1':
-        call_ac1(key, secret, host, apicall, params)
+        ok = call_ac1(key, secret, host, apicall, params, show_output=verbose)
     elif api == 'ac2':
-        call_ac2(key, secret, host, apicall, method, params)
+        ok = call_ac2(key, secret, host, apicall, method, params,
+                      show_output=verbose)
     else:
-        call_ms1(key, secret, host, _get('port'), apicall, params)
+        ok = call_ms1(key, secret, host, _get('port'), apicall, params,
+                      show_output=verbose)
     e('\n---------------------------------------------\n', wrap=False)
     e('Done.')
+    if resp:
+        return ok
     return
-
-
-clack.add_command(call)
 
 
 @click.command(help="Edit an existing environment/user combo")
@@ -570,8 +685,61 @@ def set_default(name=None, *args, **kwargs):
     save_config(config)
     e('Config "%s" has been set as the default config' % name)
 
-
 clack.add_command(set_default)
+
+
+@click.command(
+    "delegate",
+    help="Create a deferred login link for JW Platform",
+)
+@click.option(
+    '--host', '-h',
+    help='Set a custom host for making API Calls',
+    metavar='HOSTNAME',
+    envvar='CLACK_HOST',
+    default='dashboard.jwplatform.com',
+)
+@click.argument(
+    "key",
+    metavar='KEY',
+    required=True,
+    # help="The API key for this user",
+)
+@click.argument(
+    "secret",
+    metavar='SECRET',
+    required=True,
+    # help="The API secret for this user",
+)
+@click.argument(
+    "duration",
+    metavar='SECS',
+    required=False,
+    # help="The the validity of the key in seconds.",
+    type=click.INT,
+    default=300,
+)
+def delegate(key, secret, duration, host):
+    """
+        This function creates a delegate login url to
+        automatically log users into the platform dashboard.
+    """
+    timestamp = calendar.timegm(time.gmtime()) + duration
+    query_string = "account_key=%s&auth_key=%s" % (key, key)
+
+    # if redirect is not None:
+    #     query_string += "&redirect=%s" % urllib.quote_plus(redirect)
+
+    timestamp_query = "&timestamp=%s" % (timestamp)
+    signature = hashlib.sha1(query_string + timestamp_query + secret)\
+        .hexdigest()
+
+    query_string += "&signature=%s" % signature
+    query_string += timestamp_query
+
+    e("http://%s%s?%s" % (host, DELEGATE_LOGIN_URL, query_string))
+
+clack.add_command(delegate)
 
 
 if __name__ == '__main__':

@@ -329,7 +329,8 @@ class Client(object):
             if process_response == True:
                 response = self._render_error_response("CallFailed",
                         "API Call Failed",
-                        "Max connection retries exceeded")
+                        # "Max connection retries exceeded")
+                        "%s" % str(e))
             else:
                 raise
         except urllib3.exceptions.TimeoutError, e:

@@ -2,7 +2,7 @@
 
 # Barebones script to pull in dependencies.
 
-CLICK_VERSION="3.3";
+CLICK_VERSION="4.0";
 HTTPLIB2_VERSION="0.9";
 URLLIB3_VERSION="1.10.1";
 
