@@ -9,7 +9,7 @@ Clack works with the following API's
 - [JW Player](http://www.jwplayer.com) Account API v2²
 
 
-¹: The JW Platform API can be _accessed by all Jw Platform users and resellers_.    
+¹: The JW Platform API can be _accessed by all Jw Platform users and resellers_.
 
 ²: The JW Player Account API is at this moment __not accessible__ for customers.
 
@@ -17,27 +17,12 @@ Clack works with the following API's
 
 ## Installation
 
-### On OS X
-
-On OS X you can download the disk image (_dmg file_) of [the latest release][lr] and install _clack_ more or less in the same way as you would usually install applications. The difference is that in Clack's case you will not be dragging the file to the `/Applications` folder but to the `/usr/local/bin` folder. In some cases you're not allowed to write in this directory and you will be asked for your administrator password. If you're already using [_homebrew_][hb] then you'll probably be able to write in this directory.
-
-### On Windows
-
-It should probably work when you have something like [Cygwin][cw] installed, but I have not tested it. Please let me know your experiences.
-
-[cw]: https://cygwin.com/
-
-### Manual installation
-
-Download the _zip file_ of [the latest release][lr], unzip it and copy the unzipped `clack` file to a location on your path and make sure the file is executable.
+Starting with version 0.3.0 Clack supports installation through pip. This gives you a more “*pythonic*” way to install the script.  It's suggested to  install **clack** in a [virtualenv](https://virtualenv.pypa.io/en/latest/) to get a cleaner install.
 
 ``` bash
-cp clack /usr/local/bin/
-chmod u+x /usr/local/bin/clack
+pip install clack-cli
 ```
 
-[lr]: https://github.com/rmnl/clack/releases
-[hb]: http://brew.sh/
 
 ## Usage
 
@@ -54,7 +39,7 @@ Clack will ask you for the following information:
 3. The **api** type you're saving. Currently there are three options:
    
    1. `ms1`: Media Services (aka JW Platform) API version 1.
-   2. `ac1`: Player Account API version 1.
+   2. `ac1`: Player Account API version 1.e
    3. `ac2`: Player Account API version 2.
    
 4. The **host** of the api. E.g. _api.jwplatform.com_. Do not add slashes or a protocol.
@@ -116,21 +101,15 @@ clack c /videos/list
 Available Environment vars are:
 
 - `CLACK_API`
+  
 - `CLACK_FORMAT`
+  
 - `CLACK_HOST`
+  
 - `CLACK_KEY`
+  
 - `CLACK_METHOD`
+  
 - `CLACK_SECRET`
-
-
-## What changed:
-
-#### Version 3:
-
-- Use setuptools.
-  
-- ~~Batch calls~~
-  
-- ~~Delegate login~~
   
   ​

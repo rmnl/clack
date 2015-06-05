@@ -4,18 +4,7 @@
 .DS_Store
 *.pyc
 
-# - the built binary,
-bin/clack
-
-# - the external dependencies
-# clack/contrib/click
-# clack/contrib/httplib2
-# clack/contrib/urllib3
-
-# - the distribution files,
+build/*
+clack.egg-info/*
+clack_cli.egg-info/*
 dist/*
-!dist/.empty
-
-# - and anything temporary.
-tmp/*
-!tmp/.empty

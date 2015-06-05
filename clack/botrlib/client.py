@@ -14,12 +14,12 @@ import time
 import pickle
 import random
 import urllib
+import urllib3
 import hashlib
 import logging
 from pprint import pformat
 from types import DictType
-from contrib import urllib3
-from contrib.botrlib import __version__
+from . import __version__
 
 _log = logging.getLogger(__name__)
 
