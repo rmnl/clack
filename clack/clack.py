@@ -14,12 +14,11 @@ import shutil
 import textwrap
 import time
 
-from . import VERSION
 from botrlib import Client as BotrClient
 from account_client import API as ACCOUNT_API
 from unified_client import UnifiedAPI
 
-
+VERSION = '0.3.1'
 APP_NAME = 'Clack'
 DEFAULTS = {
     'key': '',
@@ -433,23 +432,49 @@ def batch(csvfile=None, apicall=None, params=None, *args, **kwargs):
     QUIET = not kwargs.get('verbose', False)
     config = read_config()
     variables = re.findall(r'(<<(\w+)>>)', params)
+    num_rows = sum(1 for line in open(csvfile, 'r')) - 1
     table = unicode_csv_reader(open(csvfile, 'r'))
-    header = []
-    for columns in table:
-        if not header:
-            header = columns
-            continue
-        prms = params
-        values = {}
-        for i, val in enumerate(columns):
-            values[header[i]] = val
-        for search_for, name in variables:
-            replace_with = values.get(name, False)
-            if replace_with:
-                prms = prms.replace(search_for, replace_with)
-        ok = _call(config, apicall, prms, True, *args, **kwargs)
-        ok = 'ok   ' if ok else 'error'
-        e("- %s: %s" % (ok, prms), force=True)
+    header, failed, current_row, current_row_id = [], [], 0, None
+
+    def _current_row_id(current_item):
+        return "%s: %s" % (
+            ('{:<%s}' % len(str(num_rows))).format(current_row),
+            current_row_id
+        )
+
+    with click.progressbar(
+        length=num_rows,
+        label='Making the calls',
+        item_show_func=_current_row_id
+    ) as bar:
+        for columns in table:
+            if not header:
+                header = columns
+                continue
+            current_row += 1
+            current_row_id = columns[0]
+            prms = params
+            values = {}
+            for i, val in enumerate(columns):
+                values[header[i]] = val
+            for search_for, name in variables:
+                replace_with = values.get(name, False)
+                if replace_with:
+                    prms = prms.replace(search_for, replace_with)
+            if not _call(config, apicall, prms, True, *args, **kwargs):
+                failed.append("%s" % current_row)
+            bar.update(1)
+    # Print a summary on failure:
+    if failed:
+        e("PLEASE NOTE:", True)
+        e(
+            "%s of the %s calls you made failed." % (len(failed), num_rows),
+            True
+        )
+        e("The following row numbers failed:\n")
+        e(", ".join(failed), True)
+    else:
+        e("All went well! You're done now.", True)
 
 clack.add_command(batch)
 
