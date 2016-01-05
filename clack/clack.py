@@ -6,7 +6,9 @@ import click
 import ConfigParser
 import csv
 import hashlib
+import httplib2
 import json
+import keyring
 import os
 import pprint
 import re
@@ -16,17 +18,17 @@ import time
 
 from botrlib import Client as BotrClient
 from account_client import API as ACCOUNT_API
-from unified_client import UnifiedAPI
+from distutils.version import StrictVersion
 
-VERSION = '0.3.1'
+VERSION = '0.4.0'
 APP_NAME = 'Clack'
 DEFAULTS = {
     'key': '',
-    'secret': '',
     'host': 'api.jwplatform.com',
     'port': None,
-    'method': 'POST',
+    'method': 'post',
 }
+KEYRING_ID = 'com.github.rmnl.clack.'
 DELEGATE_LOGIN_URL = '/delegate_login/'
 
 QUIET = False
@@ -52,7 +54,7 @@ def edit_environment(config, update=None, *args, **kwargs):
         'api': 'ms1',
         'host': 'api.jwplatform.com',
         'key': None,
-        'secret': None,
+        'secret': '',
         'description': None,
     }
     if update is None:
@@ -69,10 +71,11 @@ def edit_environment(config, update=None, *args, **kwargs):
     else:
         name = update
         for var in defaults:
-            try:
-                defaults[var] = config.get(name, var)
-            except ConfigParser.NoOptionError:
-                pass
+            if not var == 'secret':
+                try:
+                    defaults[var] = config.get(name, var)
+                except ConfigParser.NoOptionError:
+                    pass
     api = user_input(
         "What type of API is this?\n"
         "  ms1 : media services api (aka botr, jwplatform)\n"
@@ -89,32 +92,55 @@ def edit_environment(config, update=None, *args, **kwargs):
         r'^[a-zA-Z0-9-.]+\.(jwplatform|jwplayer|longtailvideo)\.com$',
         "The hostname is not correct, please try again",
     )
-    key = user_input(
-        "Please provide the API key for this user",
-        defaults['key'],
-        r'^[a-zA-Z0-9]{8,}$',
-        "A API is alphanumeric and at least 8 characters long. "
-        "Please try again",
-    )
-    secret = user_input(
-        "Please provide the API secret for this user",
-        defaults['secret'],
-        r'^[a-zA-Z0-9]{20,}$',
-        "A API is alphanumeric and at least 20 characters long. "
-        "Please try again",
-    )
+    if api == 'ac2':
+        key = user_input(
+            "Please provide your login/email",
+            defaults['key'],
+            r'^.*$',
+            "",
+        )
+        secret = user_input(
+            "Please provide your password for this user. The password is "
+            "stored in your system's password keyring. Leave empty to input "
+            "the password with each call",
+            defaults['secret'],
+            r'^.*$',
+            "",
+            hide_input=True,
+        )
+    else:
+        key = user_input(
+            "Please provide the API key for this user",
+            defaults['key'],
+            r'^[a-zA-Z0-9]{8,}$',
+            "A API is alphanumeric and at least 8 characters long. "
+            "Please try again",
+        )
+        secret = user_input(
+            "Please provide the API secret for this user. The secret is "
+            "stored in your system's password keyring. Leave empty to input "
+            "the secret with each call",
+            defaults['secret'],
+            r'^[a-zA-Z0-9]{20,}$|^$',
+            "A API is alphanumeric and at least 20 characters long. "
+            "Please try again",
+            hide_input=True,
+        )
     description = user_input(
         "Please add a description for this environment",
         defaults['description'],
     )
-    if name and host and key and secret and update is None:
+    if name and host and key and update is None:
         config.add_section(name)
-    if name and host and key and secret:
+    if name and host and key:
         config.set(name, 'key', key)
-        config.set(name, 'secret', secret)
         config.set(name, 'host', host)
         config.set(name, 'description', description)
         config.set(name, 'api', api)
+    if name and key and secret:
+        keyring.set_password(keyring_id(name), key, secret)
+    elif name and key and keyring.get_password(keyring_id(name), key):
+        keyring.delete_password(keyring_id(name), key)
     return config
 
 
@@ -135,15 +161,43 @@ def call_ac1(key, secret, host, apicall, params, show_output=True):
         e("%s" % resp, force=show_output)
 
 
-def call_ac2(key, secret, host, apicall, method, params, show_output=True):
-    apicall = "/v2/%s" % apicall
-    api = UnifiedAPI(key, secret, host=host)
-    resp = api.call(apicall, method, params)
+def _ac2_get_session(login, password, host, as_admin=False):
+    if as_admin:
+        params = {'login': login, 'password': password, }
+        resp = call_ac2(host, '/admin/sessions/', 'POST', params,
+                        show_output=False)
+        if resp.get('return_value', None) is not None:
+            return resp['return_value'].get('id', None)
+    else:
+        params = {'userEmail': login, 'userPassword': password, }
+        resp = call_ac2(host, '/account/sessions/start/', 'POST', params,
+                        show_output=False)
+        if resp.get('return_value', None) is not None:
+            return resp['return_value'].get('signature', None)
+    return None
+
+
+def call_ac2(host, apicall, method, params, login=None, password=None,
+             show_output=True):
+    as_admin = True if apicall.startswith('/admin/') else False
+    api = httplib2.Http(disable_ssl_certificate_validation=True)
+    url = "https://%s/v2%s" % (host, apicall)
+    if not url.endswith('/'):
+        url = "%s/" % url
+    headers = {'Content-type': 'application/json', }
+    if login and password:
+        session = _ac2_get_session(login, password, host, as_admin)
+        if session is not None:
+            headers['Authorization'] = session
+    body = json.dumps(params)
+    (resp, content) = api.request(
+        url, method.upper(), body=body, headers=headers
+    )
     try:
-        resp = json.loads(resp)
+        resp = json.loads(content)
         if show_output:
             pprint.pprint(resp, indent=4)
-        return True
+        return resp
     except ValueError:
         e("%s" % resp, force=show_output)
         return False
@@ -231,13 +285,27 @@ def list_configs(config):
         return False
 
 
-def p(m, default=None, wrap=True):
+def p(m, default=None, wrap=True, hide_input=False):
     """
-    Shorthand for click.echo, but with textwrapping.
+    Shorthand for click.prompt, but with textwrapping.
     """
     if wrap:
-        return click.prompt(textwrap.fill(m, 80), default=default)
-    return click.prompt(m, default=default)
+        return click.prompt(textwrap.fill(m, 80), default=default,
+                            hide_input=hide_input)
+    return click.prompt(m, default=default, hide_input=hide_input)
+
+
+def keyring_id(section_name):
+    return '%s%s' % (KEYRING_ID, section_name)
+
+
+def ask_secret():
+    return user_input(
+        'Enter the secret/password for to make the call',
+        None,
+        None,
+        hide_input=True,
+    )
 
 
 def read_config():
@@ -258,8 +326,9 @@ def unicode_csv_reader(utf8_data, dialect=csv.excel, **kwargs):
         yield [unicode(cell, 'utf-8') for cell in row]
 
 
-def user_input(question, default=None, regex=None, error=None, wrap=True):
-    val = p(question, default=default, wrap=wrap)
+def user_input(question, default=None, regex=None, error=None, wrap=True,
+               hide_input=False):
+    val = p(question, default=default, wrap=wrap, hide_input=hide_input)
     if not val and default:
         return default
     if regex is None:
@@ -324,9 +393,8 @@ clack.add_command(add)
 )
 @click.option(
     '--secret', '-s',
-    help='Set a custom secret for API Calls',
-    metavar='SECRET',
-    envvar='CLACK_SECRET',
+    help='Prompt for the secret/password',
+    is_flag=True,
 )
 @click.option(
     '--host', '-h',
@@ -391,9 +459,8 @@ clack.add_command(call)
 )
 @click.option(
     '--secret', '-s',
-    help='Set a custom secret for API Calls',
-    metavar='SECRET',
-    envvar='CLACK_SECRET',
+    help='Prompt for the secret/password',
+    is_flag=True,
 )
 @click.option(
     '--host', '-h',
@@ -430,6 +497,8 @@ clack.add_command(call)
 def batch(csvfile=None, apicall=None, params=None, *args, **kwargs):
     global QUIET
     QUIET = not kwargs.get('verbose', False)
+    if kwargs.get('secret', False):
+        kwargs['batch_secret'] = ask_secret()
     config = read_config()
     variables = re.findall(r'(<<(\w+)>>)', params)
     num_rows = sum(1 for line in open(csvfile, 'r')) - 1
@@ -501,10 +570,17 @@ def _call(config, apicall=None, params=None, resp=False, *args, **kwargs):
 
     api = _get('api')
     key = _get('key')
-    secret = _get('secret')
     host = _get('host')
 
-    if not api or not key or not secret or not host:
+    if config.has_option(env, 'secret'):
+        e(
+            "You still have secrets stored in your config file. Please run "
+            "`clack upgrade` to move secrets from your config file to your "
+            "system's password storage."
+        )
+        return
+
+    if not api or not key or not host:
         e(
             "There is not enough information to make an API call."
             "Setup your configuration correctly or provide the correct "
@@ -513,6 +589,12 @@ def _call(config, apicall=None, params=None, resp=False, *args, **kwargs):
             force=True
         )
         return
+
+    secret = kwargs.get('batch_secret', None)
+    if not secret and not kwargs.get('secret', False):
+        secret = keyring.get_password(keyring_id(env), key) if key else None
+    if not secret:
+        secret = ask_secret()
 
     if params is not None:
         try:
@@ -535,7 +617,7 @@ def _call(config, apicall=None, params=None, resp=False, *args, **kwargs):
     e('\n---------------------------------------------\n', wrap=False)
     e(['api', api])
     e(['key', key])
-    e(['secret', secret])
+    e(['secret', len(secret) * '*'])
     e(['host', host])
     e(['call', apicall])
     if api == 'ac2':
@@ -552,7 +634,7 @@ def _call(config, apicall=None, params=None, resp=False, *args, **kwargs):
     if api == 'ac1':
         ok = call_ac1(key, secret, host, apicall, params, show_output=verbose)
     elif api == 'ac2':
-        ok = call_ac2(key, secret, host, apicall, method, params,
+        ok = call_ac2(host, apicall, method, params, login=key, password=secret,
                       show_output=verbose)
     else:
         ok = call_ms1(key, secret, host, _get('port'), apicall, params,
@@ -667,6 +749,10 @@ def remove(name=None, *args, **kwargs):
         )
         return
     if click.confirm('You are about to delete "%s". Are you sure?' % name):
+        if config.has_option(name, 'key'):
+            key = config.get(name, 'key')
+            if keyring.get_password(keyring_id(name), key):
+                keyring.delete_password(keyring_id(name), key)
         config.remove_section(name)
         save_config(config)
         e('Config "%s" has been successfully deleted' % name)
@@ -765,3 +851,43 @@ def delegate(key, secret, duration, host):
     e("http://%s%s?%s" % (host, DELEGATE_LOGIN_URL, query_string))
 
 clack.add_command(delegate)
+
+
+# Upgrade command.
+@click.command(
+    help="Upgrade your config file to the latest version.",
+)
+def upgrade(*args, **kwargs):
+    config = read_config()
+    upgraded = False
+    try:
+        version = config.get('etc', 'version')
+    except ConfigParser.NoSectionError:
+        config.add_section('etc')
+        version = '0.0.1'
+    except ConfigParser.NoOptionError:
+        version = '0.0.1'
+
+    if StrictVersion(version) < StrictVersion('0.4.0'):
+        e('Moving secrets/passwords from config file to keyring for:')
+        sections = [s for s in config.sections() if not s == 'etc']
+        for section in sections:
+            key, secret = None, None
+            if config.has_option(section, 'key'):
+                key = config.get(section, 'key')
+            if config.has_option(section, 'secret'):
+                secret = config.get(section, 'secret')
+            if key and secret:
+                keyring.set_password(keyring_id(section), key, secret)
+                config.remove_option(section, 'secret')
+                e('- %s' % section)
+        upgraded = True
+
+    config.set('etc', 'version', VERSION)
+    save_config(config)
+    if upgraded:
+        e('Upgrade completed.')
+    else:
+        e('Nothing to upgrade.')
+
+clack.add_command(upgrade)

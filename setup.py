@@ -18,9 +18,10 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
-        'Click>=3.3',
+        'Click>=5.0',
         'httplib2>=0.9',
         'urllib3>=1.10.1',
+        'keyring>=5.7.1',
     ],
     entry_points={
         'console_scripts': [
@@ -28,7 +29,7 @@ setup(
         ],
     },
     classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'Topic :: Utilities',
         'License :: OSI Approved :: MIT License',

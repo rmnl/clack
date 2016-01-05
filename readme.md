@@ -9,7 +9,7 @@ Clack works with the following API's
 - [JW Player](http://www.jwplayer.com) Account API v2²
 
 
-¹: The JW Platform API can be _accessed by all Jw Platform users and resellers_.
+¹: The JW Platform API can be _accessed by all JW Platform users and resellers_and JW Player users with valid API credentials.
 
 ²: The JW Player Account API is at this moment __not accessible__ for customers.
 
@@ -45,9 +45,9 @@ Clack will ask you for the following information:
    
 4. The **host** of the api. E.g. _api.jwplatform.com_. Do not add slashes or a protocol.
    
-5. The API **key** of the user you want to save
+5. The API **key** of the user you want to save.
    
-6. The API **secret** of the user you want to save
+6. The API **secret** of the user you want to save. This secret is stored in your system's password storage with [keyring](https://github.com/jaraco/keyring).
    
 7. A short **description** (optional) to explain the short name you chose above. E.g. _Reseller  user on JW Platform API_
 
@@ -62,7 +62,6 @@ You can also manually add configurations to the config file. They look like:
 [ms1-reseller]
 api = ms1
 key = a1S2d3F4
-secret = sdfs36erfsd32234ffegsdgssdg
 host = api.jwplatform.com
 description = reseller on jw platform api
 ```
@@ -128,15 +127,8 @@ clack c /videos/list
 Available Environment vars are:
 
 - `CLACK_API`
-  
 - `CLACK_FORMAT`
-  
 - `CLACK_HOST`
-  
 - `CLACK_KEY`
-  
 - `CLACK_METHOD`
-  
-- `CLACK_SECRET`
-  
   ​
