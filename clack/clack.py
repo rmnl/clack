@@ -20,7 +20,7 @@ from botrlib import Client as BotrClient
 from account_client import API as ACCOUNT_API
 from distutils.version import StrictVersion
 
-VERSION = '0.4.0'
+VERSION = '0.4.1'
 APP_NAME = 'Clack'
 DEFAULTS = {
     'key': '',
@@ -222,7 +222,7 @@ def call_ms1(key, secret, host, port, apicall, params, show_output=True):
             return False
             e("\nCALL FAILED PLEASE CHECK OUTPUT ABOVE!")
     else:
-        e("%s" % resp, force=show_output)
+        e("%s" % resp, force=show_output, wrap=False)
         return True
 
 
