@@ -13,6 +13,7 @@ import os
 import pprint
 import re
 import shutil
+import sys
 import textwrap
 import time
 
@@ -20,7 +21,7 @@ from botrlib import Client as BotrClient
 from account_client import API as ACCOUNT_API
 from distutils.version import StrictVersion
 
-VERSION = '0.4.1'
+VERSION = '0.4.2'
 APP_NAME = 'Clack'
 DEFAULTS = {
     'key': '',
@@ -89,7 +90,7 @@ def edit_environment(config, update=None, *args, **kwargs):
     host = user_input(
         "Please provide the hostname for this environment",
         defaults['host'],
-        r'^[a-zA-Z0-9-.]+\.(jwplatform|jwplayer|longtailvideo)\.com$',
+        r'^(http[s]{0,1}:\/\/)*[a-zA-Z0-9-.]+\.(jwplatform|jwplayer|longtailvideo)\.com$',
         "The hostname is not correct, please try again",
     )
     if api == 'ac2':
@@ -144,8 +145,8 @@ def edit_environment(config, update=None, *args, **kwargs):
     return config
 
 
-def call_ac1(key, secret, host, apicall, params, show_output=True):
-    api = ACCOUNT_API(key, secret, host=host)
+def call_ac1(key, secret, protocol, host, apicall, params, show_output=True):
+    api = ACCOUNT_API(key, secret, protocol=protocol, host=host)
     params['api_format'] = 'json'
     resp = api.call(apicall, params)
     try:
@@ -161,55 +162,58 @@ def call_ac1(key, secret, host, apicall, params, show_output=True):
         e("%s" % resp, force=show_output)
 
 
-def _ac2_get_session(login, password, host, as_admin=False):
+def _ac2_get_session(login, password, protocol, host, as_admin=False):
     if as_admin:
         params = {'login': login, 'password': password, }
-        resp = call_ac2(host, '/admin/sessions/', 'POST', params,
+        resp = call_ac2(protocol, host, '/admin/sessions/', 'POST', params,
                         show_output=False)
-        if resp.get('return_value', None) is not None:
+        if resp and resp.get('return_value', None) is not None:
             return resp['return_value'].get('id', None)
     else:
         params = {'userEmail': login, 'userPassword': password, }
-        resp = call_ac2(host, '/account/sessions/start/', 'POST', params,
-                        show_output=False)
-        if resp.get('return_value', None) is not None:
+        resp = call_ac2(protocol, host, '/account/sessions/start/', 'POST',
+                        params, show_output=False)
+        if resp and resp.get('return_value', None) is not None:
             return resp['return_value'].get('signature', None)
     return None
 
 
-def call_ac2(host, apicall, method, params, login=None, password=None,
+def call_ac2(protocol, host, apicall, method, params, login=None, password=None,
              show_output=True):
     as_admin = True if apicall.startswith('/admin/') else False
     api = httplib2.Http(disable_ssl_certificate_validation=True)
-    url = "https://%s/v2%s" % (host, apicall)
+    url = "%s://%s/v2%s" % (protocol, host, apicall)
     if not url.endswith('/'):
         url = "%s/" % url
     headers = {'Content-type': 'application/json', }
     if login and password:
-        session = _ac2_get_session(login, password, host, as_admin)
-        if session is not None:
-            headers['Authorization'] = session
+        session = _ac2_get_session(login, password, protocol, host, as_admin)
+        if session is None:
+            sys.exit('Unable to initiate session.')
+        headers['Authorization'] = session
     body = json.dumps(params)
-    (resp, content) = api.request(
+    (response, content) = api.request(
         url, method.upper(), body=body, headers=headers
     )
     try:
-        resp = json.loads(content)
+        content = json.loads(content)
         if show_output:
-            pprint.pprint(resp, indent=4)
-        return resp
+            pprint.pprint(content, indent=4)
+        return content
     except ValueError:
-        e("%s" % resp, force=show_output)
+        e("Response: %s" % response, force=show_output)
+        e("Content: %s" % content, force=show_output)
+        sys.exit('ValueError trying to decode API response content.')
         return False
 
 
-def call_ms1(key, secret, host, port, apicall, params, show_output=True):
+def call_ms1(key, secret, protocol, host, port, apicall, params, show_output=True):
     msa = BotrClient(
         key,
         secret,
         host=host,
         port=port,
-        protocol='https',
+        protocol=protocol,
         client='clack',
     )
     resp = msa.request(apicall, params)
@@ -572,6 +576,10 @@ def _call(config, apicall=None, params=None, resp=False, *args, **kwargs):
     key = _get('key')
     host = _get('host')
 
+    protocol = 'https'
+    if host.startswith('http'):
+        protocol, host = host.split('://')
+
     if config.has_option(env, 'secret'):
         e(
             "You still have secrets stored in your config file. Please run "
@@ -618,6 +626,7 @@ def _call(config, apicall=None, params=None, resp=False, *args, **kwargs):
     e(['api', api])
     e(['key', key])
     e(['secret', len(secret) * '*'])
+    e(['protocol', protocol])
     e(['host', host])
     e(['call', apicall])
     if api == 'ac2':
@@ -632,13 +641,14 @@ def _call(config, apicall=None, params=None, resp=False, *args, **kwargs):
 
     verbose = kwargs.get('verbose', True)
     if api == 'ac1':
-        ok = call_ac1(key, secret, host, apicall, params, show_output=verbose)
+        ok = call_ac1(key, secret, protocol, host, apicall, params,
+                      show_output=verbose)
     elif api == 'ac2':
-        ok = call_ac2(host, apicall, method, params, login=key, password=secret,
-                      show_output=verbose)
+        ok = call_ac2(protocol, host, apicall, method, params, login=key,
+                      password=secret, show_output=verbose)
     else:
-        ok = call_ms1(key, secret, host, _get('port'), apicall, params,
-                      show_output=verbose)
+        ok = call_ms1(key, secret, protocol, host, _get('port'), apicall,
+                      params, show_output=verbose)
     e('\n---------------------------------------------\n', wrap=False)
     e('Done.')
     if resp:
