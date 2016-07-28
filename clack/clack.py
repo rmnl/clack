@@ -145,9 +145,12 @@ def edit_environment(config, update=None, *args, **kwargs):
     return config
 
 
-def call_ac1(key, secret, protocol, host, apicall, params, show_output=True):
+def call_ac1(key, secret, protocol, host, apicall, params, show_output=True,
+             dry_run=False):
     api = ACCOUNT_API(key, secret, protocol=protocol, host=host)
     params['api_format'] = 'json'
+    if dry_run:
+        return api.call(apicall, params, url_only=True)
     resp = api.call(apicall, params)
     try:
         resp = json.loads(resp)
@@ -178,8 +181,19 @@ def _ac2_get_session(login, password, protocol, host, as_admin=False):
     return None
 
 
+def _ac2_request_summary(url, method, body, headers):
+    return "\n".join([
+        "url: %s" % url,
+        "method: %s" % method,
+        "headers: \n- %s" % "\n- ".join(["%s: %s"] % (
+            name, headers[name]) for name in headers
+        ),
+        "body: \n%s" % body,
+    ])
+
+
 def call_ac2(protocol, host, apicall, method, params, login=None, password=None,
-             show_output=True):
+             show_output=True, dry_run=False):
     as_admin = True if apicall.startswith('/admin/') else False
     api = httplib2.Http(disable_ssl_certificate_validation=True)
     url = "%s://%s/v2%s" % (protocol, host, apicall)
@@ -192,6 +206,8 @@ def call_ac2(protocol, host, apicall, method, params, login=None, password=None,
             sys.exit('Unable to initiate session.')
         headers['Authorization'] = session
     body = json.dumps(params)
+    if dry_run:
+        return _ac2_request_summary(url, method.upper(), body, headers)
     (response, content) = api.request(
         url, method.upper(), body=body, headers=headers
     )
@@ -207,7 +223,8 @@ def call_ac2(protocol, host, apicall, method, params, login=None, password=None,
         return False
 
 
-def call_ms1(key, secret, protocol, host, port, apicall, params, show_output=True):
+def call_ms1(key, secret, protocol, host, port, apicall, params,
+             show_output=True, dry_run=False):
     msa = BotrClient(
         key,
         secret,
@@ -216,6 +233,9 @@ def call_ms1(key, secret, protocol, host, port, apicall, params, show_output=Tru
         protocol=protocol,
         client='clack',
     )
+    if dry_run:
+        params['api_format'] = 'json'
+        return msa.request(apicall, params, url_only=True)
     resp = msa.request(apicall, params)
     if params['api_format'] == 'py':
         if show_output:
@@ -635,20 +655,25 @@ def _call(config, apicall=None, params=None, resp=False, *args, **kwargs):
     e(['params', "%s" % params])
     e('\n---------------------------------------------\n', wrap=False)
 
-    if kwargs.get('dry_run', False):
-        e("Only doing a dry run. Exiting now", force=True)
-        return
-
+    dry_run = kwargs.get('dry_run', False)
     verbose = kwargs.get('verbose', True)
     if api == 'ac1':
         ok = call_ac1(key, secret, protocol, host, apicall, params,
-                      show_output=verbose)
+                      show_output=verbose, dry_run=dry_run)
     elif api == 'ac2':
         ok = call_ac2(protocol, host, apicall, method, params, login=key,
-                      password=secret, show_output=verbose)
+                      password=secret, show_output=verbose,
+                      dry_run=dry_run)
     else:
         ok = call_ms1(key, secret, protocol, host, _get('port'), apicall,
-                      params, show_output=verbose)
+                      params, show_output=verbose, dry_run=dry_run)
+
+    if kwargs.get('dry_run', False):
+        e("DRY RUN ONLY.")
+        e("The following request would have been made: ", force=True)
+        e("%s" % ok, force=True, wrap=False)
+        return
+
     e('\n---------------------------------------------\n', wrap=False)
     e('Done.')
     if resp:

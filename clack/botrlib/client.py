@@ -98,7 +98,7 @@ class Client(object):
         """Get last request URL."""
         return self._url
 
-    def request(self, path, query_params=dict()):
+    def request(self, path, query_params=dict(), url_only=False):
         """Make an API request."""
 
         if query_params is not None:
@@ -129,6 +129,11 @@ class Client(object):
 
         self._url = "%s://%s/%s%s" % (self._connection.scheme, self._connection.host,
                 self._api_version, path if path else '')
+
+        if url_only:
+            return self._url + "?%s&api_signature=%s" % (
+                sbs, query_params['api_signature']
+            )
 
         headers = {
             'User-Agent': 'python-botrlib/%s' % __version__

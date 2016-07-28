@@ -85,7 +85,7 @@ class API(object):
         self._url = '%s://%s%s/%s' % (protocol, host, ':%s' % port if port else '', version)
         self._kit_version = u'py-%s%s' % (__version__, '-%s' % client if client else '')
 
-    def call(self, api_call, params=dict(), verbose=False):
+    def call(self, api_call, params=dict(), verbose=False, url_only=False):
         """Prepare an API call"""
 
         if params is None:
@@ -97,6 +97,9 @@ class API(object):
         params = params.copy()
 
         url = self.call_url(api_call, params)
+
+        if url_only:
+            return url
 
         if 'api_format' not in params:
             params['api_format'] = 'py'
