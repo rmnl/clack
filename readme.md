@@ -5,7 +5,6 @@ Clack is a Command Line API Calling Kit based on [Click][1].
 Clack works with the following API's
 
 - [JW Platform API](http://apidocs.jwplayer.com/)¹
-- [JW Player](http://www.jwplayer.com) Account API v1²
 - [JW Player](http://www.jwplayer.com) Account API v2²
 
 
@@ -40,8 +39,7 @@ Clack will ask you for the following information:
 3. The **api** type you're saving. Currently there are three options:
    
    1. `ms1`: Media Services (aka JW Platform) API version 1.
-   2. `ac1`: Player Account API version 1.e
-   3. `ac2`: Player Account API version 2.
+   2. `ac2`: Player Account API version 2.
    
 4. The **host** of the api. E.g. _api.jwplatform.com_. Do not add slashes or a protocol.
    

@@ -18,10 +18,9 @@ import textwrap
 import time
 
 from botrlib import Client as BotrClient
-from account_client import API as ACCOUNT_API
 from distutils.version import StrictVersion
 
-VERSION = '0.4.2'
+VERSION = '0.5.0'
 APP_NAME = 'Clack'
 DEFAULTS = {
     'key': '',
@@ -47,7 +46,7 @@ class AliasedGroup(click.Group):
             return None
         elif len(matches) == 1:
             return click.Group.get_command(self, ctx, matches[0])
-        ctx.fail('Too many matches: %s' % ', '.join(sorted(matches)))
+        ctx.fail('Too many matches: {!s}'.format(', '.join(sorted(matches))))
 
 
 def edit_environment(config, update=None, *args, **kwargs):
@@ -80,10 +79,9 @@ def edit_environment(config, update=None, *args, **kwargs):
     api = user_input(
         "What type of API is this?\n"
         "  ms1 : media services api (aka botr, jwplatform)\n"
-        "  ac1 : account api version 1 (as used by account dashboard)\n"
         "  ac2 : account api version 2 (as used by unified dashboard)\n",
         defaults['api'],
-        r'^ms1|ac1|ac2$',
+        r'^ms1|ac2$',
         'Please choose a valid option and try again',
         wrap=False,
     )
@@ -145,26 +143,6 @@ def edit_environment(config, update=None, *args, **kwargs):
     return config
 
 
-def call_ac1(key, secret, protocol, host, apicall, params, show_output=True,
-             dry_run=False):
-    api = ACCOUNT_API(key, secret, protocol=protocol, host=host)
-    params['api_format'] = 'json'
-    if dry_run:
-        return api.call(apicall, params, url_only=True)
-    resp = api.call(apicall, params)
-    try:
-        resp = json.loads(resp)
-        if show_output:
-            pprint.pprint(resp, indent=4)
-        if resp['status'] == 'success':
-            return True
-        else:
-            e("\nCALL FAILED PLEASE CHECK OUTPUT ABOVE!", force=show_output)
-            return False
-    except ValueError:
-        e("%s" % resp, force=show_output)
-
-
 def _ac2_get_session(login, password, protocol, host, as_admin=False):
     if as_admin:
         params = {'login': login, 'password': password, }
@@ -183,12 +161,12 @@ def _ac2_get_session(login, password, protocol, host, as_admin=False):
 
 def _ac2_request_summary(url, method, body, headers):
     return "\n".join([
-        "url: %s" % url,
-        "method: %s" % method,
-        "headers: \n- %s" % "\n- ".join(["%s: %s"] % (
-            name, headers[name]) for name in headers
-        ),
-        "body: \n%s" % body,
+        "url: {!s}".format(url),
+        "method: {!s}".format(method),
+        "headers: \n - {!s}".format("\n - ".join([
+            "{!s}: {!s}".format(name, headers[name]) for name in headers
+        ])),
+        "body: \n{!s}".format(body),
     ])
 
 
@@ -196,9 +174,9 @@ def call_ac2(protocol, host, apicall, method, params, login=None, password=None,
              show_output=True, dry_run=False):
     as_admin = True if apicall.startswith('/admin/') else False
     api = httplib2.Http(disable_ssl_certificate_validation=True)
-    url = "%s://%s/v2%s" % (protocol, host, apicall)
+    url = "{!s}://{!s}/v2{!s}".format(protocol, host, apicall)
     if not url.endswith('/'):
-        url = "%s/" % url
+        url = "{!s}/".format(url)
     headers = {'Content-type': 'application/json', }
     if login and password:
         session = _ac2_get_session(login, password, protocol, host, as_admin)
@@ -217,8 +195,8 @@ def call_ac2(protocol, host, apicall, method, params, login=None, password=None,
             pprint.pprint(content, indent=4)
         return content
     except ValueError:
-        e("Response: %s" % response, force=show_output)
-        e("Content: %s" % content, force=show_output)
+        e("Response: {!s}".format(response), force=show_output)
+        e("Content: {!s}".format(content), force=show_output)
         sys.exit('ValueError trying to decode API response content.')
         return False
 
@@ -246,7 +224,7 @@ def call_ms1(key, secret, protocol, host, port, apicall, params,
             return False
             e("\nCALL FAILED PLEASE CHECK OUTPUT ABOVE!")
     else:
-        e("%s" % resp, force=show_output, wrap=False)
+        e("{!s}".format(resp), force=show_output, wrap=False)
         return True
 
 
@@ -265,7 +243,7 @@ def e(m, force=False, wrap=True):
             if wrap:
                 m[1] = "\n                          "\
                     .join(textwrap.wrap(m[1], 54))
-            click.echo("%s: %s" % (
+            click.echo("{!s}: {!s}".format(
                 '{:<19}'.format(m[0]), m[1]))
         else:
             if wrap:
@@ -289,9 +267,9 @@ def list_configs(config):
         for i, section in enumerate(sections):
             description = 'no description'
             if section == default or (default is None and i < 1):
-                section_str = "+ %s" % section
+                section_str = "+ {!s}".format(section)
             else:
-                section_str = "  %s" % section
+                section_str = "  {!s}".format(section)
             if config.has_option(section, 'description'):
                 description = config.get(section, 'description')
             api = 'ms1'
@@ -320,7 +298,7 @@ def p(m, default=None, wrap=True, hide_input=False):
 
 
 def keyring_id(section_name):
-    return '%s%s' % (KEYRING_ID, section_name)
+    return '{!s}{!s}'.format(KEYRING_ID, section_name)
 
 
 def ask_secret():
@@ -370,8 +348,9 @@ def user_input(question, default=None, regex=None, error=None, wrap=True,
     short_help="Clack is a Command Line Api Calling Kit based on Click",
     epilog="If this is your first time using clack, please run 'clack init' "
     "to initialize a config file. If you're comfortable enough you can edit "
-    "this file directly. The location of the config file is:\n%s"
-    % config_path(),
+    "this file directly. The location of the config file is:\n{!s}".format(
+        config_path(),
+    )
     # invoke_without_command=True,
 )
 @click.version_option(
@@ -406,7 +385,7 @@ clack.add_command(add)
 @click.option(
     '--api', '-a',
     help='Choose the api you want to make calls to',
-    type=click.Choice(['ms1', 'ac1', 'ac2']),
+    type=click.Choice(['ms1', 'ac2']),
     envvar='CLACK_API',
 )
 @click.option(
@@ -472,7 +451,7 @@ clack.add_command(call)
 @click.option(
     '--api', '-a',
     help='Choose the api you want to make calls to',
-    type=click.Choice(['ms1', 'ac1', 'ac2']),
+    type=click.Choice(['ms1', 'ac2']),
     envvar='CLACK_API',
 )
 @click.option(
@@ -530,8 +509,8 @@ def batch(csvfile=None, apicall=None, params=None, *args, **kwargs):
     header, failed, current_row, current_row_id = [], [], 0, None
 
     def _current_row_id(current_item):
-        return "%s: %s" % (
-            ('{:<%s}' % len(str(num_rows))).format(current_row),
+        return "{!s}: {!s}".format(
+            ('{:<{!s}}'.format(len(str(num_rows)))).format(current_row),
             current_row_id
         )
 
@@ -555,13 +534,13 @@ def batch(csvfile=None, apicall=None, params=None, *args, **kwargs):
                 if replace_with:
                     prms = prms.replace(search_for, replace_with)
             if not _call(config, apicall, prms, True, *args, **kwargs):
-                failed.append("%s" % current_row)
+                failed.append("{!s}".format(current_row))
             bar.update(1)
     # Print a summary on failure:
     if failed:
         e("PLEASE NOTE:", True)
         e(
-            "%s of the %s calls you made failed." % (len(failed), num_rows),
+            "{!s} of the {!s} calls you made failed.".format(len(failed), num_rows),
             True
         )
         e("The following row numbers failed:\n")
@@ -629,7 +608,7 @@ def _call(config, apicall=None, params=None, resp=False, *args, **kwargs):
             params = ast.literal_eval(params)
         except:
             e('We failed interpreting your params')
-            e("%s" % params)
+            e("{!s}".format(params))
             return
         if not isinstance(params, dict):
             e("Your params where malformatted. Aborting now", force=True)
@@ -640,7 +619,7 @@ def _call(config, apicall=None, params=None, resp=False, *args, **kwargs):
     if api == 'ms1':
         params['api_format'] = kwargs.get('format', 'py')
 
-    e("Environment is %s" % env)
+    e("Environment is {!s}".format(env))
 
     e('\n---------------------------------------------\n', wrap=False)
     e(['api', api])
@@ -652,15 +631,12 @@ def _call(config, apicall=None, params=None, resp=False, *args, **kwargs):
     if api == 'ac2':
         method = _get('method')
         e(['method', method])
-    e(['params', "%s" % params])
+    e(['params', "{!s}".format(params)])
     e('\n---------------------------------------------\n', wrap=False)
 
     dry_run = kwargs.get('dry_run', False)
     verbose = kwargs.get('verbose', True)
-    if api == 'ac1':
-        ok = call_ac1(key, secret, protocol, host, apicall, params,
-                      show_output=verbose, dry_run=dry_run)
-    elif api == 'ac2':
+    if api == 'ac2':
         ok = call_ac2(protocol, host, apicall, method, params, login=key,
                       password=secret, show_output=verbose,
                       dry_run=dry_run)
@@ -671,7 +647,7 @@ def _call(config, apicall=None, params=None, resp=False, *args, **kwargs):
     if kwargs.get('dry_run', False):
         e("DRY RUN ONLY.")
         e("The following request would have been made: ", force=True)
-        e("%s" % ok, force=True, wrap=False)
+        e("{!s}".format(ok), force=True, wrap=False)
         return
 
     e('\n---------------------------------------------\n', wrap=False)
@@ -696,13 +672,12 @@ def edit(name=None, *args, **kwargs):
         )
     if not config.has_section(name):
         e(
-            'The config you selected (%s) does not exist. Please try again'
-            % name
+            'The config you selected ({!s}) does not exist. Please try again'.format(name)
         )
         return
     config = edit_environment(config, name)
     save_config(config)
-    e('Config "%s" has been updated' % name)
+    e('Config "{!s}" has been updated'.format(name))
 
 
 clack.add_command(edit)
@@ -724,7 +699,7 @@ def init(force, *args, **kwargs):
                 e(
                     "There already is a config and the script cannot remove "
                     "it. Please do so manually and rerun this command. You "
-                    "need to delete the directory %s" % path
+                    "need to delete the directory {!s}".format(path)
                 )
                 return
         else:
@@ -779,18 +754,17 @@ def remove(name=None, *args, **kwargs):
             return
     if not config.has_section(name):
         e(
-            'The config you selected (%s) does not exist. Please try again'
-            % name
+            'The config you selected ({!s}) does not exist. Please try again'.format(name)
         )
         return
-    if click.confirm('You are about to delete "%s". Are you sure?' % name):
+    if click.confirm('You are about to delete "{!s}". Are you sure?'.format(name)):
         if config.has_option(name, 'key'):
             key = config.get(name, 'key')
             if keyring.get_password(keyring_id(name), key):
                 keyring.delete_password(keyring_id(name), key)
         config.remove_section(name)
         save_config(config)
-        e('Config "%s" has been successfully deleted' % name)
+        e('Config "{!s}" has been successfully deleted'.format(name))
     else:
         e('Aborted')
     return
@@ -821,15 +795,14 @@ def set_default(name=None, *args, **kwargs):
             return
     if not config.has_section(name):
         e(
-            'The config you selected (%s) does not exist. Please try again'
-            % name
+            'The config you selected ({!s}) does not exist. Please try again'.format(name)
         )
         return
     if not config.has_section('etc'):
         config.add_section('etc')
     config.set('etc', 'default', name)
     save_config(config)
-    e('Config "%s" has been set as the default config' % name)
+    e('Config "{!s}" has been set as the default config'.format(name))
 
 clack.add_command(set_default)
 
@@ -871,19 +844,16 @@ def delegate(key, secret, duration, host):
         automatically log users into the platform dashboard.
     """
     timestamp = calendar.timegm(time.gmtime()) + duration
-    query_string = "account_key=%s&auth_key=%s" % (key, key)
+    query_string = "account_key={!s}&auth_key={!s}".format(key, key)
 
-    # if redirect is not None:
-    #     query_string += "&redirect=%s" % urllib.quote_plus(redirect)
-
-    timestamp_query = "&timestamp=%s" % (timestamp)
+    timestamp_query = "&timestamp={!s}".format(timestamp)
     signature = hashlib.sha1(query_string + timestamp_query + secret)\
         .hexdigest()
 
-    query_string += "&signature=%s" % signature
+    query_string += "&signature={!s}".format(signature)
     query_string += timestamp_query
 
-    e("http://%s%s?%s" % (host, DELEGATE_LOGIN_URL, query_string))
+    e("http://{!s}{!s}?{!s}".format(host, DELEGATE_LOGIN_URL, query_string))
 
 clack.add_command(delegate)
 
@@ -915,7 +885,23 @@ def upgrade(*args, **kwargs):
             if key and secret:
                 keyring.set_password(keyring_id(section), key, secret)
                 config.remove_option(section, 'secret')
-                e('- %s' % section)
+                e('- {!s}'.format(section))
+        upgraded = True
+
+    if StrictVersion(version) < StrictVersion('0.5.0'):
+        e('Removing ac1 configurations because that API no longer exists')
+        for section in sections:
+            api, key = None, None
+            if config.has_option(section, 'api'):
+                key = config.get(section, 'api')
+            if not api == 'ac1':
+                continue
+            if config.has_option(section, 'key'):
+                key = config.get(section, 'key')
+            config.remove_section(section)
+            if key:
+                keyring.remove_password(keyring_id(section), key)
+            e('- Removed: {!s}'.format(section))
         upgraded = True
 
     config.set('etc', 'version', VERSION)
