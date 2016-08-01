@@ -890,17 +890,18 @@ def upgrade(*args, **kwargs):
 
     if StrictVersion(version) < StrictVersion('0.5.0'):
         e('Removing ac1 configurations because that API no longer exists')
+        sections = [s for s in config.sections() if not s == 'etc']
         for section in sections:
             api, key = None, None
             if config.has_option(section, 'api'):
-                key = config.get(section, 'api')
+                api = config.get(section, 'api')
             if not api == 'ac1':
                 continue
             if config.has_option(section, 'key'):
                 key = config.get(section, 'key')
             config.remove_section(section)
             if key:
-                keyring.remove_password(keyring_id(section), key)
+                keyring.delete_password(keyring_id(section), key)
             e('- Removed: {!s}'.format(section))
         upgraded = True
 
