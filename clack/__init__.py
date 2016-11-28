@@ -1,1 +1,1 @@
-from clack import VERSION
+from environment import VERSION

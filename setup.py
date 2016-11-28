@@ -18,14 +18,15 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
-        'Click>=5.0',
-        'httplib2>=0.9',
-        'urllib3>=1.10.1',
+        'Click>=6.6',
         'keyring>=5.7.1',
+        'requests>=2.10.0',
+        'jwplatform>=1.1.0',
+        'httpie==0.9.6',
     ],
     entry_points={
         'console_scripts': [
-            'clack = clack.__main__:clack'
+            'clack = clack.cli:clack'
         ],
     },
     classifiers=[
