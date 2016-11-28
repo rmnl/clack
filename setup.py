@@ -22,12 +22,15 @@ setup(
         'keyring>=5.7.1',
         'requests>=2.10.0',
         'jwplatform>=1.1.0',
-        'httpie==0.9.6',
+        'Pygments>=2.1.3',
     ],
     entry_points={
         'console_scripts': [
             'clack = clack.cli:clack'
         ],
+    },
+    extras_require={
+        'yaml': ['PyYAML>=3.12'],
     },
     classifiers=[
         'Development Status :: 4 - Beta',

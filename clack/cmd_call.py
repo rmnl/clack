@@ -1,16 +1,11 @@
 import ast
 import click
 import csv
-import json
 import jwplatform
 import re
 
-# from httpie.context import Environment as HttpieEnv
-# from httpie.core import main as run_httpie
 from environment import Options
 from lib_portal_api import PortalAPI
-
-# env, api, key, secret, host, format, method, quiet, dry_run
 
 
 class CallCommands(object):
@@ -31,14 +26,13 @@ class CallCommands(object):
         method = getattr(ac2_api, config.method)
         resp = method(endpoint, params=params, raw_response=True)
         resp_headers = CallCommands.normalize_headers(resp.headers)
-        mime = resp_headers.get('content-type', 'application/json')
         if batch:
             return str(resp.status_code).startswith('2')
         else:
             env.echo("Response headers: ", style='heading')
             env.echo(env.colorize(env.create_table(resp_headers)))
             env.echo("Response body:", style='heading')
-            env.echo(env.colorize(env.prettify_json(resp.content, mime=mime), mime=mime), force=True)
+            env.output_response(resp.json())
 
     @staticmethod
     def _call_ms1(env, config, endpoint, params=None, batch=False):
@@ -48,13 +42,12 @@ class CallCommands(object):
         if host.startswith('http'):
             protocol, host = host.split('://')
         jc = jwplatform.Client(config.key, config.secret, host=host, scheme=protocol, agent='clack')
-        # TODO: Optional batch header batch header
         try:
             resp = getattr(jc, endpoint.replace('/', '.'))(**params)
             if batch:
                 return True
             env.echo("Response body:", style='heading')
-            env.echo(env.colorize(env.prettify_json(json.dumps(resp))), force=True)
+            env.output_response(resp)
         except jwplatform.errors.JWPlatformError as e:
             if batch:
                 return False
@@ -168,7 +161,7 @@ class CallCommands(object):
                 bar.update(1)
         env.echo("")
         env.echo("Batch results: ", style='heading')
-        if env.sys_env.stdout_isatty:
+        if env.stdout_isatty:
             table = env.create_table(results, headers=(header_row[0], 'SUCCESS'))
             env.echo(table[:3] + env.colorize(table[3:]))
         else:

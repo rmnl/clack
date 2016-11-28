@@ -1,18 +1,40 @@
 import click
 import ConfigParser
 import keyring
+import json
 import os
+import pprint
 import re
 import sys
 
-from httpie.context import Environment as SysEnv
-from httpie.plugins import ColorFormatter
-from httpie.plugins import JSONFormatter
+from pygments import highlight
+from pygments import lexer
+from pygments import token
+from pygments.lexers import JsonLexer
+from pygments.lexers import PythonLexer
+from pygments.lexers import YamlLexer
+from pygments.formatters import Terminal256Formatter
+from pygments.formatters import TerminalFormatter
+
+try:
+    import curses
+except ImportError:
+    curses = None  # Compiled w/o curses
+
+try:
+    import yaml
+except ImportError:
+    yaml = None  # No Yaml Extras
+
 
 VERSION = '2.0.0-beta'
 APP_NAME = 'Clack'
+DEFAULT_INDENT = 4
+DEFAULT_COLOR_STYLE = 'monokai'
 KEYRING_ID = 'com.github.rmnl.clack.'
 TAB_SIZE = 4
+
+OUTPUT_OPTIONS = ['json', 'py', 'yaml'] if yaml else ['json', 'py']
 
 API_DEFAULT_HOSTS = {
     'ms1': 'api.jwplatform.com',
@@ -30,6 +52,12 @@ STYLES = {
         'bg': 'red',
         'reverse': False,
     }
+}
+
+OUTPUT_LEXERS = {
+    'json': JsonLexer,
+    'py': PythonLexer,
+    'yaml': YamlLexer,
 }
 
 
@@ -58,21 +86,32 @@ class Environment(object):
         user in- and output.
     """
 
+    color_style = DEFAULT_COLOR_STYLE
+    is_windows = 'win32' in str(sys.platform).lower()
+    stdout_isatty = sys.stdout.isatty()
+    term_colors = 256
+    term_width, term_height = click.get_terminal_size()
     quiet = False
 
     def __init__(self, *args, **kwargs):
-        self.sys_env = SysEnv()
+        # Set the number of colors of the terminal
+        if not self.is_windows and curses:
+            try:
+                curses.setupterm()
+                self.term_colors = curses.tigetnum('colors')
+            except curses.error:
+                pass
         self.options = Options(**kwargs)
         # If the output is not to a terminal
-        if not self.sys_env.stdout_isatty:
+        if not self.stdout_isatty:
             self.quiet = True
-            self.options.no_colors = True
+            self.options.color_scheme = 'no-colors'
         # Set quiet based on explicit verbosity setting
         if self.options.verbosity != 'auto':
             self.quiet = True if self.options.verbosity == 'quiet' else False
         # no_formatting implies no_colors
         if self.options.no_formatting:
-            self.options.no_colors = True
+            self.options.color_scheme = 'no-colors'
         self.config = ConfigParser.RawConfigParser(allow_no_value=True)
         self.config.read([Environment.config_path()])
 
@@ -190,8 +229,7 @@ class Environment(object):
                 self.echo(line, force=force, *args, **kwargs)
         else:
             if style is not None and STYLES.get(style) is not None:
-                terminal_width, terminal_height = click.get_terminal_size()
-                msg = ("{:<" + str(terminal_width) + "}").format(msg)
+                msg = ("{:<" + str(self.term_width) + "}").format(msg)
                 msg = self.style(msg, fg=STYLES[style]['fg'], bg=STYLES[style]['bg'],
                                  reverse=STYLES[style]['reverse'])
             if not isinstance(msg, basestring):
@@ -201,7 +239,7 @@ class Environment(object):
     def style(self, text, *args, **kwargs):
         """ Returns click.style function if colors are allowed.
         """
-        return text if self.options.no_colors else click.style(text, *args, **kwargs)
+        return text if self.options.color_scheme == 'no-colors' else click.style(text, *args, **kwargs)
 
     def create_table(self, columns, headers=None, max_width=80, div=":"):
         """ Create a table of key and value pairs based on a list of tuples or a
@@ -222,24 +260,40 @@ class Environment(object):
         lines.append("")
         return lines
 
-    def prettify_json(self, data, mime="application/json"):
-        """ Format the JSON so it's pretty readable
-        """
-        if self.options.no_formatting:
-            return data
-        jf = JSONFormatter(explicit_json=False)
-        return jf.format_body(body=data, mime=mime)
+    def output_response(self, resp):
+        if self.options.no_formatting and isinstance(resp, basestring):
+            output = resp
+        resp_dict = resp if isinstance(resp, dict) else json.loads(resp)
+        if self.options.output == 'py':
+            output = pprint.pformat(resp_dict, indent=DEFAULT_INDENT, width=10, depth=None)
+        elif self.options.output == 'yaml' and yaml is not None:
+            output = (yaml.dump(resp_dict, default_flow_style=False)).replace('!!python/unicode ', '')
+        else:
+            output = json.dumps(
+                obj=resp_dict,
+                sort_keys=True,
+                ensure_ascii=False,
+                indent=DEFAULT_INDENT
+            )
+        self.echo(self.colorize(output), force=True)
+        # env.echo(env.colorize(env.prettify_json(json.dumps(resp))), force=True)
 
-    def colorize(self, data, mime="application/json", color_scheme="solarized"):
+    def colorize(self, data):
         """ Give the terminal output some nice colors
         """
-        if self.options.no_colors:
+        if self.options.color_scheme == 'no-colors' or self.is_windows:
             return data
-        cf = ColorFormatter(env=self.sys_env, color_scheme=color_scheme)
-        if isinstance(data, list):
-            return [cf.format_headers(line) for line in data]
+        # Determine the type of terminal formatter to use
+        if self.term_colors == 256:
+            formatter = Terminal256Formatter(style=self.options.color_scheme)
         else:
-            return cf.format_body(data, mime)
+            formatter = TerminalFormatter(style=self.options.color_scheme)
+
+        if isinstance(data, list):
+            return [highlight(line, TableLexer(), formatter).strip() for line in data]
+        else:
+            return highlight(data, OUTPUT_LEXERS[self.options.output](), formatter).strip()
+        return data
 
     # User input
 
@@ -368,7 +422,7 @@ class Environment(object):
             Invoked by: clack settings list
         """
         if self.sections:
-            headers = ('CONFIG NAME', 'API, DESCRIPTION')
+            headers = ('  CONFIG NAME', 'API, DESCRIPTION')
             sections, columns = sorted(self.sections), []
             for i, section in enumerate(sections):
                 marker = "+" if self.default == section else " "
@@ -380,7 +434,8 @@ class Environment(object):
                 columns.append((left, right))
             self.echo("The following API settings are available:")
             table = self.create_table(columns, headers=headers)
-            self.echo(table[:3] + self.colorize(table[3:]))
+            # self.echo(table[:3] + self.colorize(table[3:]))
+            self.echo(self.colorize(table))
             self.echo("+ marks the default environment.")
             self.echo("")
         else:
@@ -398,3 +453,26 @@ class Environment(object):
             8 * '*' if secret or self.get_secret(name, self.get(name, 'secret')) else 'Input at runtime.',
         ))
         self.echo(self.create_table(columns))
+
+
+class TableLexer(lexer.RegexLexer):
+    """Simplified lexer for Pygments that handles the lines in the table.
+    """
+    name = 'Table'
+    aliases = ['table']
+    filenames = ['*.table']
+    tokens = {
+        'root': [
+            # Table line
+            (r'(-+ : -+)', lexer.bygroups(
+                token.Text,
+            )),
+            (r'(.*?)( *: *)(.+)(,?)(.*?)', lexer.bygroups(
+                token.Keyword,  # Right
+                token.Text,
+                token.Name.Attribute,  # Left before comma
+                token.Text,
+                token.String  # Left after comma
+            ))
+        ]
+    }

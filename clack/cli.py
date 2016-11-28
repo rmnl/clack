@@ -3,9 +3,11 @@
 import click
 
 from environment import Environment
+from environment import OUTPUT_OPTIONS
 from environment import VERSION
 from cmd_call import CallCommands
 from cmd_settings import SettingsCommands
+from pygments.styles import STYLE_MAP
 
 
 # Aliased Group Class #########################################################
@@ -50,7 +52,8 @@ def clack():
 
 @click.command(
     help="Make api calls",
-    epilog="params are defined as a python dictionary e.g. \"{'test': True, 'foo': 'bar'}\""
+    epilog="Params are defined as a python dictionary e.g. \"{'test': True, 'foo': 'bar'}\"\n\n"
+           "Color scheme options are: " + ", ".join(STYLE_MAP.keys())
 )
 @click.option(
     '--env', '-e',
@@ -96,6 +99,14 @@ def clack():
     metavar="CSV_FILE",
 )
 @click.option(
+    '--output', '-o',
+    help="Choose the output type",
+    metavar='TYPE',
+    envvar='CLACK_OUTPUT',
+    default='json',
+    type=click.Choice(OUTPUT_OPTIONS),
+)
+@click.option(
     '--verbosity', '-v',
     help="Verbose output is the default terminal output and clack is quiet with non terminal output. "
          "Use this flag to change this default behavior.",
@@ -105,9 +116,13 @@ def clack():
     type=click.Choice(['auto', 'quiet', 'verbose'])
 )
 @click.option(
-    '--no-colors',
-    help="Do not use a colored output.",
-    is_flag=True,
+    '--color-scheme', '-c',
+    help="Choose the color style you want to use. Set to \"no-colors\" to disable colors. "
+         "The default color scheme is \"monokai\". See below for other options.",
+    default='monokai',
+    type=click.Choice(['no-colors', ] + STYLE_MAP.keys()),
+    metavar="NAME",
+    envvar='CLACK_COLOR_SCHEME',
 )
 @click.option(
     '--no-formatting',

@@ -141,4 +141,6 @@ Available Environment vars are:
 - `CLACK_HOST`
 - `CLACK_KEY`
 - `CLACK_METHOD`
+- `CLACK_OUTPUT`
+- `CLACK_COLOR_SCHEME`
 - `CLACK_VERBOSITY`
