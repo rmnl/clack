@@ -29,9 +29,6 @@ setup(
             'clack = clack.cli:clack'
         ],
     },
-    extras_require={
-        'yaml': ['PyYAML>=3.12'],
-    },
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',

@@ -12,7 +12,6 @@ from pygments import lexer
 from pygments import token
 from pygments.lexers import JsonLexer
 from pygments.lexers import PythonLexer
-from pygments.lexers import YamlLexer
 from pygments.formatters import Terminal256Formatter
 from pygments.formatters import TerminalFormatter
 
@@ -20,11 +19,6 @@ try:
     import curses
 except ImportError:
     curses = None  # Compiled w/o curses
-
-try:
-    import yaml
-except ImportError:
-    yaml = None  # No Yaml Extras
 
 
 VERSION = '2.0.0-beta'
@@ -34,7 +28,7 @@ DEFAULT_COLOR_STYLE = 'monokai'
 KEYRING_ID = 'com.github.rmnl.clack.'
 TAB_SIZE = 4
 
-OUTPUT_OPTIONS = ['json', 'py', 'yaml'] if yaml else ['json', 'py']
+OUTPUT_OPTIONS = ['json', 'py']
 
 API_DEFAULT_HOSTS = {
     'ms1': 'api.jwplatform.com',
@@ -57,7 +51,6 @@ STYLES = {
 OUTPUT_LEXERS = {
     'json': JsonLexer,
     'py': PythonLexer,
-    'yaml': YamlLexer,
 }
 
 
@@ -261,13 +254,12 @@ class Environment(object):
         return lines
 
     def output_response(self, resp):
-        if self.options.no_formatting and isinstance(resp, basestring):
-            output = resp
+        if self.options.no_formatting:
+            output = resp if isinstance(resp, basestring) else "{!s}".format(resp)
+            return self.echo(output, force=True)
         resp_dict = resp if isinstance(resp, dict) else json.loads(resp)
         if self.options.output == 'py':
             output = pprint.pformat(resp_dict, indent=DEFAULT_INDENT, width=10, depth=None)
-        elif self.options.output == 'yaml' and yaml is not None:
-            output = (yaml.dump(resp_dict, default_flow_style=False)).replace('!!python/unicode ', '')
         else:
             output = json.dumps(
                 obj=resp_dict,
@@ -275,8 +267,7 @@ class Environment(object):
                 ensure_ascii=False,
                 indent=DEFAULT_INDENT
             )
-        self.echo(self.colorize(output), force=True)
-        # env.echo(env.colorize(env.prettify_json(json.dumps(resp))), force=True)
+        return self.echo(self.colorize(output), force=True)
 
     def colorize(self, data):
         """ Give the terminal output some nice colors

@@ -101,7 +101,6 @@ def clack():
 @click.option(
     '--output', '-o',
     help="Choose the output type",
-    metavar='TYPE',
     envvar='CLACK_OUTPUT',
     default='json',
     type=click.Choice(OUTPUT_OPTIONS),
