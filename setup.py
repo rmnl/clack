@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 with open('description.rst') as f:
     long_description = f.read()
 
-version = __import__('clack').version.VERSION
+version = __import__('clack.version').version.VERSION
 
 setup(
     name='clack-cli',
