@@ -2,11 +2,11 @@
 
 import click
 
-from environment import COMMON_SETTINGS
-from environment import Environment
-from environment import VERSION
 from cmd_call import CallCommands
 from cmd_settings import SettingsCommands
+from environment import COMMON_SETTINGS
+from environment import Environment
+from version import VERSION
 
 TEMP_ENV = Environment()
 
@@ -52,6 +52,7 @@ def clack():
 # CLACK - Call ################################################################
 
 @click.command(
+    "call",
     help="Make api calls",
     epilog="Params are defined as a python dictionary e.g. \"{'test': True, 'foo': 'bar'}\"\n\n"
            "Color scheme options are: " + ", ".join(COMMON_SETTINGS['color_scheme']['options']) + "\n\n"

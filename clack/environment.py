@@ -17,13 +17,14 @@ from pygments.formatters import Terminal256Formatter
 from pygments.formatters import TerminalFormatter
 from pygments.styles import STYLE_MAP
 
+from version import VERSION
+
 try:
     import curses
 except ImportError:
     curses = None  # Compiled w/o curses
 
 
-VERSION = '2.0.0b3'
 APP_NAME = 'Clack'
 DEFAULT_INDENT = 4
 KEYRING_ID = 'com.github.rmnl.clack.'

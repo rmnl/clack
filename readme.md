@@ -37,10 +37,10 @@ The configuration file is created in your home directory `/Users/<your_username>
 #### Available settings commands:
 
 - `clack settings add`: Add new API settings to the config file/keyring.
+- `clack settings defaults`: Show and set defaults for generic call settings.
 - `clack settings edit`: Edit and change existing API settings.
 - `clack settings ls`: List all saved settings.
 - `clack settings show`: Show specific settings (secret is not shown)
-- `clack settings set`: Set API settings as the default settings.
 - `clack settings rm`: Remove settings from the config file.
 - `clack settings purge`: Purge all settings and delete the configuration file and directory.
 
