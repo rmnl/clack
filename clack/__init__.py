@@ -1,1 +1,0 @@
-from clack import VERSION
