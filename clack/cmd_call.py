@@ -4,6 +4,7 @@ import csv
 import jwplatform
 import re
 
+from environment import Environment
 from environment import Options
 from lib_portal_api import PortalAPI
 
@@ -60,7 +61,7 @@ class CallCommands(object):
         """
         opts = env.options
         # Get the environment name
-        name = env.default if opts.env == 'default' else opts.env
+        name = env.default if opts.env is None else opts.env
         # If the name is not set and there is no default we need to
         # check that all other connections params have been set.
         if name is None and (not opts.host or not opts.key or not opts.api):
@@ -77,6 +78,7 @@ class CallCommands(object):
         host = opts.host if opts.host else env.get(name, 'host')
         api = opts.api if opts.api else env.get(name, 'api')
         config = {
+            'env': name,
             'host': host if host.startswith('http') else "https://{!s}".format(host),
             'key': key,
             'secret': secret,
@@ -121,10 +123,11 @@ class CallCommands(object):
         return dict([(key.lower(), headers[key]) for key in headers])
 
     @staticmethod
-    def call(env, endpoint, params_str):
+    def call(endpoint, params_str, *args, **kwargs):
         """ The call command.
             Invoked by: clack call
         """
+        env = Environment(command="call", *args, **kwargs)
         endpoint = endpoint.strip('/ ')
         api, config = CallCommands._api_config(env)
         env.echo("Call settings:", style='heading')

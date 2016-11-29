@@ -7,6 +7,7 @@ import pprint
 import re
 import sys
 
+from distutils.version import StrictVersion
 from pygments import highlight
 from pygments import lexer
 from pygments import token
@@ -14,6 +15,7 @@ from pygments.lexers import JsonLexer
 from pygments.lexers import PythonLexer
 from pygments.formatters import Terminal256Formatter
 from pygments.formatters import TerminalFormatter
+from pygments.styles import STYLE_MAP
 
 try:
     import curses
@@ -21,12 +23,26 @@ except ImportError:
     curses = None  # Compiled w/o curses
 
 
-VERSION = '2.0.0-beta'
+VERSION = '2.0.0b3'
 APP_NAME = 'Clack'
 DEFAULT_INDENT = 4
-DEFAULT_COLOR_STYLE = 'monokai'
 KEYRING_ID = 'com.github.rmnl.clack.'
 TAB_SIZE = 4
+
+COMMON_SETTINGS = {
+    'color_scheme': {
+        'default': 'monokai',
+        'options': ['no-colors', ] + STYLE_MAP.keys(),
+    },
+    'output': {
+        'default': 'json',
+        'options': ['json', 'py'],
+    },
+    'verbosity': {
+        'default': 'auto',
+        'options': ['auto', 'quiet', 'verbose'],
+    },
+}
 
 OUTPUT_OPTIONS = ['json', 'py']
 
@@ -79,14 +95,30 @@ class Environment(object):
         user in- and output.
     """
 
-    color_style = DEFAULT_COLOR_STYLE
+    color_scheme = COMMON_SETTINGS['color_scheme']['default']
+    output = COMMON_SETTINGS['output']['default']
+    verbosity = COMMON_SETTINGS['verbosity']['default']
+
     is_windows = 'win32' in str(sys.platform).lower()
     stdout_isatty = sys.stdout.isatty()
     term_colors = 256
     term_width, term_height = click.get_terminal_size()
-    quiet = False
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, command="settings", *args, **kwargs):
+        self.command = command
+        # Initialize the config and the options
+        self.options = Options(**kwargs)
+        self.config = ConfigParser.RawConfigParser(allow_no_value=True)
+        self.config.read([Environment.config_path()])
+        # Set the default settings:
+        for key in COMMON_SETTINGS:
+            # First the setting per call, then the default settings
+            val = kwargs.get(key)
+            setattr(self, key, self.get('etc', key, COMMON_SETTINGS.get(key)['default']) if val is None else val)
+        self.use_colors = (self.color_scheme != 'no-colors' and
+                           self.stdout_isatty and
+                           not self.options.no_formatting and
+                           not self.is_windows)
         # Set the number of colors of the terminal
         if not self.is_windows and curses:
             try:
@@ -94,19 +126,8 @@ class Environment(object):
                 self.term_colors = curses.tigetnum('colors')
             except curses.error:
                 pass
-        self.options = Options(**kwargs)
-        # If the output is not to a terminal
-        if not self.stdout_isatty:
-            self.quiet = True
-            self.options.color_scheme = 'no-colors'
-        # Set quiet based on explicit verbosity setting
-        if self.options.verbosity != 'auto':
-            self.quiet = True if self.options.verbosity == 'quiet' else False
-        # no_formatting implies no_colors
-        if self.options.no_formatting:
-            self.options.color_scheme = 'no-colors'
-        self.config = ConfigParser.RawConfigParser(allow_no_value=True)
-        self.config.read([Environment.config_path()])
+        # Check the config file version and upgrade if necessary
+        self.check_and_upgrade_config()
 
     # Config file management
 
@@ -115,13 +136,60 @@ class Environment(object):
         """ Returns the set of API settings that was marked as default
         """
         fallback = self.sections[0] if len(self.sections) > 0 else None
-        return self.get('etc', 'default', fallback)
+        return self.get('etc', 'env', self.get('etc', 'default', fallback))
 
     @property
     def sections(self):
         """ Returns a list of sections in the config file
         """
         return [s for s in self.config.sections() if not s == 'etc']
+
+    def check_and_upgrade_config(self):
+        version = self.get('etc', 'version', '0.0.1')
+        upgrades = []
+
+        if StrictVersion(version) < StrictVersion('0.4.0'):
+            upgrades.append('Moving secrets/passwords from config file to keyring for:')
+            for section in self.sections:
+                key = self.get(section, 'key')
+                secret = self.get(section, 'secret')
+                if key and secret:
+                    self.set_secret(section, key, secret)
+                    self.set(section, 'secret', None)
+                    upgrades.append('- {!s}'.format(section))
+
+        if StrictVersion(version) < StrictVersion('0.5.0'):
+            upgrades.append('Removing ac1 configurations because that API no longer exists')
+            for section in self.sections:
+                api = self.get(section, 'api')
+                if not api == 'ac1':
+                    continue
+                key = self.get(section, 'key')
+                self.config.remove_section(section)
+                if key:
+                    self.delete_secret(section, key)
+                upgrades.append('- Removed: {!s}'.format(section))
+            if not self.get('etc', 'default') in self.sections:
+                self.set('etc', 'default', self.sections[0] if self.sections else None)
+
+        if StrictVersion(version) < StrictVersion('2.0.0b3'):
+            upgrades.append('Renaming default to env.')
+            default = self.get('etc', 'default')
+            if default is not None:
+                self.set('etc', 'default', None)
+                self.set('etc', 'env', default)
+            upgrades.append('Adding defaults.')
+            for opt in COMMON_SETTINGS:
+                self.set('etc', opt, COMMON_SETTINGS[opt]['default'])
+
+        if len(upgrades) > 0:
+            self.set('etc', 'version', VERSION)
+            self.save()
+            if version == '0.0.1':
+                self.echo("Created your config file.", style="heading")
+            else:
+                self.echo('Upgraded your config file to the latest version.', style='heading')
+                self.echo(upgrades)
 
     @staticmethod
     def config_path():
@@ -138,6 +206,15 @@ class Environment(object):
         if self.config.has_section(section) and self.config.has_option(section, key):
             return self.config.get(section, key)
         return fallback
+
+    def set(self, section, key, value):
+        if value is None:
+            if self.get(section, key) is not None:
+                self.config.remove_option(section, key)
+            return
+        if not self.config.has_section(section):
+            self.config.add_section(section)
+        self.config.set(section, key, value)
 
     def save(self):
         """ Save the config file
@@ -167,14 +244,6 @@ class Environment(object):
         )
         os.mkdir(path)
         return None
-
-    def set_default(self, name):
-        """ Set the settings with name `name` as the default settings.
-        """
-        if not self.config.has_section('etc'):
-            self.config.add_section('etc')
-        self.config.set('etc', 'default', name)
-        self.save()
 
     # Keyring management
 
@@ -214,8 +283,11 @@ class Environment(object):
     def echo(self, msg, force=False, style=None, *args, **kwargs):
         """ Outputs a message `msg` to the the stdout
         """
-        if self.quiet is True and not force:
-            return
+        if not self.command == 'settings' and not force:
+            if self.stdout_isatty and self.verbosity == 'quiet':
+                return
+            elif not self.stdout_isatty and not self.verbosity != 'verbose':
+                return
         # Stringify the message
         if isinstance(msg, list):
             for line in msg:
@@ -232,7 +304,7 @@ class Environment(object):
     def style(self, text, *args, **kwargs):
         """ Returns click.style function if colors are allowed.
         """
-        return text if self.options.color_scheme == 'no-colors' else click.style(text, *args, **kwargs)
+        return click.style(text, *args, **kwargs) if self.use_colors else text
 
     def create_table(self, columns, headers=None, max_width=80, div=":"):
         """ Create a table of key and value pairs based on a list of tuples or a
@@ -258,7 +330,7 @@ class Environment(object):
             output = resp if isinstance(resp, basestring) else "{!s}".format(resp)
             return self.echo(output, force=True)
         resp_dict = resp if isinstance(resp, dict) else json.loads(resp)
-        if self.options.output == 'py':
+        if self.output == 'py':
             output = pprint.pformat(resp_dict, indent=DEFAULT_INDENT, width=10, depth=None)
         else:
             output = json.dumps(
@@ -272,18 +344,18 @@ class Environment(object):
     def colorize(self, data):
         """ Give the terminal output some nice colors
         """
-        if self.options.color_scheme == 'no-colors' or self.is_windows:
+        if not self.use_colors:
             return data
         # Determine the type of terminal formatter to use
         if self.term_colors == 256:
-            formatter = Terminal256Formatter(style=self.options.color_scheme)
+            formatter = Terminal256Formatter(style=self.color_scheme)
         else:
-            formatter = TerminalFormatter(style=self.options.color_scheme)
+            formatter = TerminalFormatter(style=self.color_scheme)
 
         if isinstance(data, list):
             return [highlight(line, TableLexer(), formatter).strip() for line in data]
         else:
-            return highlight(data, OUTPUT_LEXERS[self.options.output](), formatter).strip()
+            return highlight(data, OUTPUT_LEXERS[self.output](), formatter).strip()
         return data
 
     # User input
@@ -391,22 +463,20 @@ class Environment(object):
             "You can add a description to make it easier to identify this set of api settings.",
             default=description,
         )
-        if name and host and key and update_for_name is None:
-            self.config.add_section(name)
         if name and host and key:
-            self.config.set(name, 'key', key)
-            self.config.set(name, 'host', host)
-            self.config.set(name, 'description', description)
-            self.config.set(name, 'api', api)
-            self.config.set(name, 'verify_ssl', verify_ssl)
+            self.set(name, 'key', key)
+            self.set(name, 'host', host)
+            self.set(name, 'description', description)
+            self.set(name, 'api', api)
+            self.set(name, 'verify_ssl', verify_ssl)
             if api == 'ac2':
-                self.config.set(name, 'is_admin', is_admin)
+                self.set(name, 'is_admin', is_admin)
         if name and key and secret:
             self.set_secret(name, key, secret)
         elif name and key and self.get_secret(name, key):
             self.delete_secret(name, key)
         if len(self.sections) <= 1 or click.confirm('Do you want to make these settings the default settings?'):
-            self.set_default(name)
+            self.set('etc', 'env', name)
 
     def list(self):
         """ List all sets op API settings.

@@ -2,6 +2,7 @@ import click
 import os
 import shutil
 
+from environment import COMMON_SETTINGS
 from environment import Environment
 
 
@@ -26,13 +27,6 @@ class SettingsCommands(object):
         env.edit()
         env.save()
         env.echo("Done.")
-
-    @staticmethod
-    def default(name=None, *args, **kwargs):
-        env = Environment(*args, **kwargs)
-        name = SettingsCommands._get_and_check_name(env, name, 'use as default')
-        env.set_default(name)
-        env.echo('"{!s}" has been set as the default.'.format(name))
 
     @staticmethod
     def edit(name=None, *args, **kwargs):
@@ -70,6 +64,35 @@ class SettingsCommands(object):
         env.api_settings(name)
 
     @staticmethod
+    def defaults(*args, **kwargs):
+        env = Environment(*args, **kwargs)
+        updated = False
+        for opt in env.options.reset:
+            opt = opt.replace('-', '_')
+            env.set('etc', opt, COMMON_SETTINGS[opt]['default'])
+            setattr(env, opt, COMMON_SETTINGS[opt]['default'])
+            updated = True
+        for opt in COMMON_SETTINGS:
+            val = env.options.dict().get(opt)
+            if val is not None:
+                env.set('etc', opt, val)
+                setattr(env, opt, val)
+                updated = True
+        if env.options.env:
+            name = SettingsCommands._get_and_check_name(env, env.options.env, 'use as default')
+            env.set('etc', 'env', name)
+            updated = True
+        if updated:
+            env.save()
+            env.echo("Your default settings have been updated.")
+        env.echo("These are your default settings:")
+        table_data = [
+            (key.replace('_', '-'), env.get('etc', key)) for key in sorted(env.config.options('etc'))
+            if key != 'version'
+        ]
+        env.echo(env.colorize(env.create_table(table_data)))
+
+    @staticmethod
     def purge(*args, **kwargs):
         env = Environment(*args, **kwargs)
         env.echo("You are about to delete all your API settings.")
@@ -85,6 +108,7 @@ class SettingsCommands(object):
         env.echo("2. Removing generic settings")
         if env.config.has_section('etc'):
             env.config.remove_section('etc')
+        env.save()
         env.echo("3. Removing config file. ")
         try:
             shutil.rmtree(os.path.dirname(env.config_path()))

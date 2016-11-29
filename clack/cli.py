@@ -2,12 +2,13 @@
 
 import click
 
+from environment import COMMON_SETTINGS
 from environment import Environment
-from environment import OUTPUT_OPTIONS
 from environment import VERSION
 from cmd_call import CallCommands
 from cmd_settings import SettingsCommands
-from pygments.styles import STYLE_MAP
+
+TEMP_ENV = Environment()
 
 
 # Aliased Group Class #########################################################
@@ -37,7 +38,7 @@ class AliasedGroup(click.Group):
     "If this is your first time using clack, please run 'clack init' "
     "to initialize a config file. If you're comfortable enough you can edit "
     "this file directly. The location of the config file is:\n{!s}".format(
-        Environment.config_path(),
+        TEMP_ENV.config_path(),
     )
 )
 @click.version_option(
@@ -53,13 +54,14 @@ def clack():
 @click.command(
     help="Make api calls",
     epilog="Params are defined as a python dictionary e.g. \"{'test': True, 'foo': 'bar'}\"\n\n"
-           "Color scheme options are: " + ", ".join(STYLE_MAP.keys())
+           "Color scheme options are: " + ", ".join(COMMON_SETTINGS['color_scheme']['options']) + "\n\n"
+           "Env (settings) names are: " + ", ".join(TEMP_ENV.sections),
 )
 @click.option(
     '--env', '-e',
-    default="default",
-    metavar="ENV",
-    help='Choose your api settings',
+    metavar="NAME",
+    type=click.Choice(TEMP_ENV.sections),
+    help='Choose your api settings. See below for all available settings.',
 )
 @click.option(
     '--api', '-a',
@@ -100,10 +102,9 @@ def clack():
 )
 @click.option(
     '--output', '-o',
-    help="Choose the output type",
-    envvar='CLACK_OUTPUT',
-    default='json',
-    type=click.Choice(OUTPUT_OPTIONS),
+    help="Choose the output format",
+    envvar='FORMAT',
+    type=click.Choice(COMMON_SETTINGS['output']['options']),
 )
 @click.option(
     '--verbosity', '-v',
@@ -111,15 +112,13 @@ def clack():
          "Use this flag to change this default behavior.",
     metavar='TYPE',
     envvar='CLACK_VERBOSITY',
-    default='auto',
-    type=click.Choice(['auto', 'quiet', 'verbose'])
+    type=click.Choice(COMMON_SETTINGS['verbosity']['options'])
 )
 @click.option(
     '--color-scheme', '-c',
     help="Choose the color style you want to use. Set to \"no-colors\" to disable colors. "
-         "The default color scheme is \"monokai\". See below for other options.",
-    default='monokai',
-    type=click.Choice(['no-colors', ] + STYLE_MAP.keys()),
+         "See below for all color schemes.",
+    type=click.Choice(COMMON_SETTINGS['color_scheme']['options']),
     metavar="NAME",
     envvar='CLACK_COLOR_SCHEME',
 )
@@ -131,8 +130,7 @@ def clack():
 @click.argument('apicall', required=True)
 @click.argument('params', required=False)
 def call(apicall=None, params=None, *args, **kwargs):
-    env = Environment(**kwargs)
-    return CallCommands.call(env, apicall, params)
+    return CallCommands.call(apicall, params, *args, **kwargs)
 
 clack.add_command(call)
 
@@ -158,16 +156,44 @@ def settings_add(*args, **kwargs):
 settings_group.add_command(settings_add)
 
 
-@click.command("set", help="Choose the default API settings.")
-@click.argument(
-    'name',
-    metavar='CONFIG_NAME',
-    required=False,
+@click.command(
+    "defaults",
+    help="Set the defaults for shared settings.",
+    epilog="Color scheme options are: " + ", ".join(COMMON_SETTINGS['color_scheme']['options']) + "\n\n"
+           "Env names are: " + ", ".join(TEMP_ENV.sections),
 )
-def settings_default(name=None, *args, **kwargs):
-    return SettingsCommands.default(name=name, *args, **kwargs)
+@click.option(
+    '--color-scheme', '-c',
+    help="Set your default color scheme. See below for all available color schemes.",
+    metavar="NAME",
+    type=click.Choice(COMMON_SETTINGS['color_scheme']['options'])
+)
+@click.option(
+    '--env', '-e',
+    help="Set your default settings. See below for all available settings.",
+    metavar="NAME",
+    type=click.Choice(TEMP_ENV.sections),
+)
+@click.option(
+    '--output', '-o',
+    help="Set the default output format.",
+    type=click.Choice(COMMON_SETTINGS['output']['options']),
+)
+@click.option(
+    '--verbosity', '-v',
+    help="Set the default verbosity.",
+    type=click.Choice(COMMON_SETTINGS['verbosity']['options']),
+)
+@click.option(
+    '--reset', '-r',
+    help="Reset a default value.",
+    type=click.Choice([key.replace('_', '-') for key in COMMON_SETTINGS.keys()]),
+    multiple=True,
+)
+def settings_defaults(*args, **kwargs):
+    return SettingsCommands.defaults(*args, **kwargs)
 
-settings_group.add_command(settings_default)
+settings_group.add_command(settings_defaults)
 
 
 @click.command('edit', help="Edit existing API settings.")
