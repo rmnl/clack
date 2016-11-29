@@ -20,7 +20,7 @@ import time
 from botrlib import Client as BotrClient
 from distutils.version import StrictVersion
 
-VERSION = '0.5.1'
+VERSION = '1.0.0'
 APP_NAME = 'Clack'
 DEFAULTS = {
     'key': '',
