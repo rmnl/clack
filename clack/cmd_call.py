@@ -27,19 +27,19 @@ class CallCommands(object):
         method = getattr(ac2_api, config.method)
         resp = method(endpoint, params=params, raw_response=True)
         resp_headers = CallCommands.normalize_headers(resp.headers)
-        if batch and env.options.return_value is None:
+        if batch and env.options.filter_response is None:
             return str(resp.status_code)
         elif batch:
-            return CallCommands._filter_return_value(env.options.return_value.split("."), resp)
+            return CallCommands._filter_response(env.options.filter_response.split("."), resp)
         else:
             env.echo("Response headers: ", style='heading')
             env.echo(env.colorize(env.create_table(resp_headers)))
-            if env.options.return_value is None:
+            if env.options.filter_response is None:
                 env.echo("Response body:", style='heading')
                 env.output_response(resp.json())
             else:
                 env.echo("Return value: ", style="heading")
-                env.output_response(CallCommands._filter_return_value(env.options.return_value.split("."), resp))
+                env.output_response(CallCommands._filter_response(env.options.filter_response.split("."), resp))
 
     @staticmethod
     def _call_ms1(env, config, endpoint, params=None, batch=False):
@@ -51,16 +51,16 @@ class CallCommands(object):
         jc = jwplatform.Client(config.key, config.secret, host=host, scheme=protocol, agent='clack')
         try:
             resp = getattr(jc, endpoint.replace('/', '.'))(**params)
-            if batch and env.options.return_value is None:
+            if batch and env.options.filter_response is None:
                 return "success"
             elif batch:
-                return CallCommands._filter_return_value(env.options.return_value.split("."), resp)
-            elif env.options.return_value is None:
+                return CallCommands._filter_response(env.options.filter_response.split("."), resp)
+            elif env.options.filter_response is None:
                 env.echo("Response body:", style='heading')
                 env.output_response(resp)
             else:
                 env.echo("Return value: ", style="heading")
-                env.output_response(CallCommands._filter_return_value(env.options.return_value.split("."), resp))
+                env.output_response(CallCommands._filter_response(env.options.filter_response.split("."), resp))
         except jwplatform.errors.JWPlatformError as e:
             if batch:
                 return "error"
@@ -68,7 +68,7 @@ class CallCommands(object):
             env.echo("{!s}".format(e), err=True)
 
     @staticmethod
-    def _filter_return_value(keymap, resp, parse_int=True):
+    def _filter_response(keymap, resp, parse_int=True):
         """ Filter the return value(s) from the response.
         """
         # Exceptional case:
@@ -86,7 +86,7 @@ class CallCommands(object):
         # Find the return value
         for i, key in enumerate(keymap, start=1):
             if key == "*" and isinstance(resp, (list, tuple)):
-                return [CallCommands._filter_return_value(keymap[i:], j, parse_int=False) for j in resp]
+                return [CallCommands._filter_response(keymap[i:], j, parse_int=False) for j in resp]
             elif isinstance(key, basestring) and isinstance(resp, dict) and resp.get(key) is not None:
                 resp = resp.get(key)
             elif isinstance(key, int) and isinstance(resp, (list, tuple)) and len(resp) > key:

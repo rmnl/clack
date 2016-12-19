@@ -102,10 +102,10 @@ def clack():
     metavar="CSV_FILE",
 )
 @click.option(
-    '--return-value', '-r',
+    '--filter-response', '-f',
     help="Filter api response for a specific value. Use dotted notation for index. E.g. videos.0.key "
-         "for the first key from a list of videos. You can also use videos.*.key, to get all keys for all "
-         "all videos in the list.",
+         "for the first key from a list of videos. You can also use videos.*.key, to get all keys for "
+         "all videos in the list or use and empty string to get everything.",
     metavar="INDEX",
 )
 @click.option(
