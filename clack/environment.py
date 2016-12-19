@@ -71,26 +71,6 @@ OUTPUT_LEXERS = {
 }
 
 
-class Options(object):
-    """ Simple class to manage values in a dictionary as class properties.
-    """
-
-    def __init__(self, initial={}, **kwargs):
-        self.options = dict(initial.items() + kwargs.items())
-
-    def __getattr__(self, name):
-        return self.get(name)
-
-    def __setattr___(self, name, value):
-        self.options[name] = value
-
-    def dict(self):
-        return self.options
-
-    def get(self, name, default=None):
-        return self.options.get(name, default)
-
-
 class Environment(object):
     """ Class contains miscellaneous functions for dealing with all settings
         user in- and output.
@@ -111,6 +91,17 @@ class Environment(object):
         self.options = Options(**kwargs)
         self.config = ConfigParser.RawConfigParser(allow_no_value=True)
         self.config.read([Environment.config_path()])
+        # Determine if we need to be verbose or not:
+        self.verbose = True
+        if not self.command == 'settings' and self.stdout_isatty and self.verbosity == 'quiet':
+            self.verbose = False
+        elif not self.command == 'settings' and not self.stdout_isatty and not self.verbosity == 'verbose':
+            self.verbose = False
+        # # temp
+        # if self.options.return_value is None:
+        #     self.echo("Return values was not set", force=True)
+        # else:
+        #     self.echo("Return values was set", force=True)
         # Set the default settings:
         for key in COMMON_SETTINGS:
             # First the setting per call, then the default settings
@@ -284,11 +275,8 @@ class Environment(object):
     def echo(self, msg, force=False, style=None, *args, **kwargs):
         """ Outputs a message `msg` to the the stdout
         """
-        if not self.command == 'settings' and not force:
-            if self.stdout_isatty and self.verbosity == 'quiet':
-                return
-            elif not self.stdout_isatty and not self.verbosity != 'verbose':
-                return
+        if not self.verbose and not force:
+            return
         # Stringify the message
         if isinstance(msg, list):
             for line in msg:
@@ -301,6 +289,12 @@ class Environment(object):
             if not isinstance(msg, basestring):
                 msg = "{!s}".format(msg)
             click.echo(msg, *args, **kwargs)
+
+    def progressbar(self, iterable, label=None, length=None):
+        if self.verbose:
+            return click.progressbar(iterable, label=label, length=length)
+        else:
+            return FakeProgressBar(iterable)
 
     def style(self, text, *args, **kwargs):
         """ Returns click.style function if colors are allowed.
@@ -330,7 +324,7 @@ class Environment(object):
         if self.options.no_formatting:
             output = resp if isinstance(resp, basestring) else "{!s}".format(resp)
             return self.echo(output, force=True)
-        resp_dict = resp if isinstance(resp, dict) else json.loads(resp)
+        resp_dict = resp if isinstance(resp, (dict, list)) else json.loads(resp)
         if self.output == 'py':
             output = pprint.pformat(resp_dict, indent=DEFAULT_INDENT, width=10, depth=None)
         else:
@@ -515,6 +509,53 @@ class Environment(object):
             8 * '*' if secret or self.get_secret(name, self.get(name, 'secret')) else 'Input at runtime.',
         ))
         self.echo(self.create_table(columns))
+
+
+class FakeProgressBar():
+    """ Simple class the replaces the click.progressbar class
+        to provide an alternative when the script is not allowed
+        to be verbose
+    """
+    def __init__(self, iterable):
+        self.iterable = iterable
+
+    def __enter__(self):
+        """ Just return the iterable
+        """
+        return ProgressList(self.iterable)
+
+    def __exit__(self, *args, **kwargs):
+        """ Dummy method
+        """
+        pass
+
+
+class Options(object):
+    """ Simple class to manage values in a dictionary as class properties.
+    """
+
+    def __init__(self, initial={}, **kwargs):
+        self.options = dict(initial.items() + kwargs.items())
+
+    def __getattr__(self, name):
+        return self.get(name)
+
+    def __setattr___(self, name, value):
+        self.options[name] = value
+
+    def dict(self):
+        return self.options
+
+    def get(self, name, default=None):
+        return self.options.get(name, default)
+
+
+class ProgressList(list):
+    """ Additional class that expands the built in list with
+        an update method similar to the progressbar class
+    """
+    def update(self, *args, **kwargs):
+        pass
 
 
 class TableLexer(lexer.RegexLexer):
