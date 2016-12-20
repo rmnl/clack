@@ -240,6 +240,22 @@ def settings_remove(name=None, *args, **kwargs):
 settings_group.add_command(settings_remove)
 
 
+@click.command(
+    "set",
+    help='Set default API settings. Short for "clack settings defaults --env CONFIG_NAME". '
+         'Might be deprecated in the future.'
+)
+@click.argument(
+    'name',
+    metavar='CONFIG_NAME',
+    required=False,
+)
+def settings_set(name=None, *args, **kwargs):
+    return SettingsCommands.set(name=name, *args, **kwargs)
+
+settings_group.add_command(settings_set)
+
+
 @click.command("show", help="Show API settings.")
 @click.argument(
     'name',
