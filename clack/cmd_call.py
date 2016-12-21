@@ -1,5 +1,4 @@
 import ast
-import click
 import csv
 import jwplatform
 import re
@@ -27,13 +26,19 @@ class CallCommands(object):
         method = getattr(ac2_api, config.method)
         resp = method(endpoint, params=params, raw_response=True)
         resp_headers = CallCommands.normalize_headers(resp.headers)
-        if batch:
-            return str(resp.status_code).startswith('2')
+        if batch and env.options.filter_response is None:
+            return str(resp.status_code)
+        elif batch:
+            return CallCommands._filter_response(env.options.filter_response.split("."), resp)
         else:
             env.echo("Response headers: ", style='heading')
             env.echo(env.colorize(env.create_table(resp_headers)))
-            env.echo("Response body:", style='heading')
-            env.output_response(resp.json())
+            if env.options.filter_response is None:
+                env.echo("Response body:", style='heading')
+                env.output_response(resp.json())
+            else:
+                env.echo("Return value: ", style="heading")
+                env.output_response(CallCommands._filter_response(env.options.filter_response.split("."), resp))
 
     @staticmethod
     def _call_ms1(env, config, endpoint, params=None, batch=False):
@@ -45,15 +50,52 @@ class CallCommands(object):
         jc = jwplatform.Client(config.key, config.secret, host=host, scheme=protocol, agent='clack')
         try:
             resp = getattr(jc, endpoint.replace('/', '.'))(**params)
-            if batch:
-                return True
-            env.echo("Response body:", style='heading')
-            env.output_response(resp)
+            if batch and env.options.filter_response is None:
+                return "success"
+            elif batch:
+                return CallCommands._filter_response(env.options.filter_response.split("."), resp)
+            elif env.options.filter_response is None:
+                env.echo("Response body:", style='heading')
+                env.output_response(resp)
+            else:
+                env.echo("Return value: ", style="heading")
+                env.output_response(CallCommands._filter_response(env.options.filter_response.split("."), resp))
         except jwplatform.errors.JWPlatformError as e:
             if batch:
-                return False
+                return "error"
             env.echo("Error response:", style='error', err=True)
             env.echo("{!s}".format(e), err=True)
+
+    @staticmethod
+    def _filter_response(keymap, resp, parse_int=True):
+        """ Filter the return value(s) from the response.
+        """
+        # Exceptional case:
+        if len(keymap) == 1 and not keymap[0]:
+            return resp
+        # Cleanup keymap and find integers
+        if parse_int:
+            for i, key in enumerate(keymap):
+                try:
+                    intval = int(key)
+                    if "{!s}".format(intval) == key:
+                        keymap[i] = intval
+                except ValueError:
+                    continue
+        # Find the return value
+        for i, key in enumerate(keymap, start=1):
+            if key == "*" and isinstance(resp, (list, tuple)):
+                return [CallCommands._filter_response(keymap[i:], j, parse_int=False) for j in resp]
+            elif isinstance(key, basestring) and isinstance(resp, dict) and resp.get(key) is not None:
+                resp = resp.get(key)
+            elif isinstance(key, int) and isinstance(resp, (list, tuple)) and len(resp) > key:
+                resp = resp[key]
+            else:
+                return "Error filtering {} at {}".format(
+                    ".".join(["{!s}".format(j) for j in keymap]),
+                    ".".join(["{!s}".format(j) for j in keymap[:i]])
+                )
+        return resp
 
     @staticmethod
     def _api_config(env):
@@ -144,9 +186,9 @@ class CallCommands(object):
         # Else make a batch call.
         num_rows = sum(1 for line in open(env.options.csv_file, 'r')) - 1
         table = CallCommands._unicode_csv_reader(open(env.options.csv_file, 'r'))
-        header_row, results = None, []
-        with click.progressbar(length=num_rows, label='Calling API') as bar:
-            for columns in table:
+        header_row, results = None, {}
+        with env.progressbar(table, length=num_rows, label='Calling API') as bar:
+            for columns in bar:
                 if header_row is None:
                     header_row = columns
                     continue
@@ -160,13 +202,8 @@ class CallCommands(object):
                 call_endpoint = endpoint
                 for search_for, name in re.findall(r'(<<(\w+)>>)', endpoint):
                     call_endpoint = (endpoint.replace(search_for, values.get(name))).strip('/ ')
-                results.append((columns[0], call_method(env, config, call_endpoint, call_params, batch=True)))
+                results[columns[0]] = call_method(env, config, call_endpoint, call_params, batch=True)
                 bar.update(1)
         env.echo("")
         env.echo("Batch results: ", style='heading')
-        if env.stdout_isatty:
-            table = env.create_table(results, headers=(header_row[0], 'SUCCESS'))
-            env.echo(table[:3] + env.colorize(table[3:]))
-        else:
-            env.echo("id,success", force=True)
-            env.echo("\n".join(["{!s},{!s}".format(*row) for row in results]), force=True)
+        env.output_response(results)

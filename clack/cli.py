@@ -102,6 +102,13 @@ def clack():
     metavar="CSV_FILE",
 )
 @click.option(
+    '--filter-response', '-f',
+    help="Filter api response for a specific value. Use dotted notation for index. E.g. videos.0.key "
+         "for the first key from a list of videos. You can also use videos.*.key, to get all keys for "
+         "all videos in the list or use and empty string to get everything.",
+    metavar="INDEX",
+)
+@click.option(
     '--output', '-o',
     help="Choose the output format",
     envvar='FORMAT',
@@ -231,6 +238,22 @@ def settings_remove(name=None, *args, **kwargs):
     return SettingsCommands.remove(name=name, *args, **kwargs)
 
 settings_group.add_command(settings_remove)
+
+
+@click.command(
+    "set",
+    help='Set default API settings. Short for "clack settings defaults --env CONFIG_NAME". '
+         'Might be deprecated in the future.'
+)
+@click.argument(
+    'name',
+    metavar='CONFIG_NAME',
+    required=False,
+)
+def settings_set(name=None, *args, **kwargs):
+    return SettingsCommands.set(name=name, *args, **kwargs)
+
+settings_group.add_command(settings_set)
 
 
 @click.command("show", help="Show API settings.")

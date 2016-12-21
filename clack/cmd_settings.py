@@ -57,6 +57,14 @@ class SettingsCommands(object):
         return
 
     @staticmethod
+    def set(name=None, *args, **kwargs):
+        env = Environment(*args, **kwargs)
+        name = SettingsCommands._get_and_check_name(env, name, 'set as the default settings')
+        env.set('etc', 'env', name)
+        env.save()
+        env.echo("{!s} has been set as the default.".format(name))
+
+    @staticmethod
     def show(name=None, *args, **kwargs):
         env = Environment(*args, **kwargs)
         name = SettingsCommands._get_and_check_name(env, name, 'show')
