@@ -97,12 +97,6 @@ class Environment(object):
             self.verbose = False
         elif not self.command == 'settings' and not self.stdout_isatty and not self.verbosity == 'verbose':
             self.verbose = False
-        # # temp
-        # if self.options.return_value is None:
-        #     self.echo("Return values was not set", force=True)
-        # else:
-        #     self.echo("Return values was set", force=True)
-        # Set the default settings:
         for key in COMMON_SETTINGS:
             # First the setting per call, then the default settings
             val = kwargs.get(key)
