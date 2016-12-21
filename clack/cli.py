@@ -35,9 +35,10 @@ class AliasedGroup(click.Group):
     help="Clack is a Command Line Api Calling Kit based on Click",
     short_help="Clack is a Command Line Api Calling Kit based on Click",
     epilog="Use \"clack COMMAND --help\" for help with subcommands.\n"
-    "If this is your first time using clack, please run 'clack init' "
-    "to initialize a config file. If you're comfortable enough you can edit "
-    "this file directly. The location of the config file is:\n{!s}".format(
+    "If this is your first time using clack, please run 'clack settings add' "
+    "to initialize a config file and to add your first settings. "
+    "If you're comfortable enough you can edit the config file directly. "
+    "The location of the config file is:\n{!s}".format(
         TEMP_ENV.config_path(),
     )
 )

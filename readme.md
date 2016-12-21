@@ -30,7 +30,7 @@ Simply run `clack` in your terminal to see more info.
 
 ### Managing API settings
 
-Clack can manage different API settings. It stores settings inside a config file and passwords/secrets inside your OS's keyring/keychain. Use of the config file is not necessary but it makes calling the API's easier, because otherwise you'll have to provide all details with each call. If you want to use the config file, you should start with `clack settings add`. 
+Clack can manage different API settings. It stores settings inside a config file and passwords/secrets inside your OS's keyring/keychain. Use of the config file is not necessary but it makes calling the API's easier, because otherwise you'll have to provide all details with each call. If you want to use the config file, you should start with `clack settings add`.
 
 The configuration file is created in your home directory `/Users/<your_username>/.clack/config.ini`.
 
@@ -41,6 +41,7 @@ The configuration file is created in your home directory `/Users/<your_username>
 - `clack settings edit`: Edit and change existing API settings.
 - `clack settings ls`: List all saved settings.
 - `clack settings show`: Show specific settings (secret is not shown)
+- `clack settings set`: Shorthand for `clack settings defaults --env`. Might be deprecated.
 - `clack settings rm`: Remove settings from the config file.
 - `clack settings purge`: Purge all settings and delete the configuration file and directory.
 
@@ -114,7 +115,7 @@ With this command the csv file would have content like this:
 | qweRTY      | 1000000   | foo           |
 | ASDfgh      | 5000000   | bar           |
 
-This means the csv file **must have a header row**. The names of the columns in the header row will be used for replacing the parameter string template with values. 
+This means the csv file **must have a header row**. The names of the columns in the header row will be used for replacing the parameter string template with values.
 
 In the above example the `<<account_key>>` will be replaced by the value of the account_key in the row. The above csv would result in the following regular api calls with clack.
 
