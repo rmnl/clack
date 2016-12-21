@@ -6,6 +6,7 @@ import re
 from environment import Environment
 from environment import Options
 from lib_portal_api import PortalAPI
+from lib_portal_api import PortalAPIError
 
 
 class CallCommands(object):
@@ -24,7 +25,12 @@ class CallCommands(object):
         ac2_api = PortalAPI(username=config.key, password=config.secret, api_url=config.host,
                             is_admin=config.is_admin, verify=config.verify_ssl)
         method = getattr(ac2_api, config.method)
-        resp = method(endpoint, params=params, raw_response=True)
+        try:
+            resp = method(endpoint, params=params, raw_response=True)
+        except PortalAPIError as e:
+            env.echo("Portal API Error:", style='error', err=True)
+            env.echo("{!s}".format(e), err=True)
+            return None
         resp_headers = CallCommands.normalize_headers(resp.headers)
         if batch and env.options.filter_response is None:
             return str(resp.status_code)
