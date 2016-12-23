@@ -65,6 +65,7 @@ def clack():
     metavar="NAME",
     type=click.Choice(env.sections),
     help='Choose your api settings. See below for all available settings.',
+    envvar="CLACK_ENV",
 )
 @click.option(
     '--api', '-a',
@@ -154,6 +155,7 @@ def clack():
     '--no-formatting',
     help="Return the response body as is. No formatting to make it more readable. Also implies --no-colors",
     is_flag=True,
+    envvar="CLACK_NO_FORMATTING",
 )
 @click.argument('apicall', required=True)
 @click.argument('params', required=False)

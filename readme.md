@@ -214,6 +214,7 @@ clack call /videos/list
 
 Available Environment vars are:
 
+- `CLACK_ENV`
 - `CLACK_API`
 - `CLACK_HOST`
 - `CLACK_KEY`
@@ -221,3 +222,5 @@ Available Environment vars are:
 - `CLACK_OUTPUT`
 - `CLACK_COLOR_SCHEME`
 - `CLACK_VERBOSITY`
+- `CLACK_NO_FORMATTING`
+
