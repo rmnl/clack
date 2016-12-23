@@ -20,7 +20,11 @@ Clack works with the following API's
 Clack Version 2 brings some new features:
 
 - Colored terminal output using [pygments](http://pygments.org/).
-- Use of the newer 
+- [Filter response output](https://github.com/rmnl/clack#filter-response-output) in regular and batch calls.
+- Admin enabled users can [make calls as another user](https://github.com/rmnl/clack#make-calls-as-another-user).
+- Different way to [manage settings](https://github.com/rmnl/clack#managing-api-settings) with [default call settings](https://github.com/rmnl/clack#managing-api-settings).
+- Use of [jwplatform](https://pypi.python.org/pypi/jwplatform) module and the excellent [requests](https://pypi.python.org/pypi/requests) module.
+- Complete rewrite.
 
 ## Installation
 
