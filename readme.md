@@ -4,8 +4,9 @@ Clack is a Command Line API Calling Kit based on [Click][1].
 
 Clack works with the following API's
 
-- [JW Platform API](http://apidocs.jwplayer.com/)¹
-- [JW Player](http://www.jwplayer.com) Account API v2²
+- `ms1`: [JW Platform API](http://apidocs.jwplayer.com/)¹
+- `ac2`: [JW Player](http://www.jwplayer.com) Account API v2²
+- `adm`: [JW Player](http://www.jwplayer.com) Account API v2 Admin endpoints²
 
 
 ¹: The JW Platform API can be _accessed by all JW Platform users and resellers_and JW Player users with valid API credentials.
@@ -13,6 +14,13 @@ Clack works with the following API's
 ²: The JW Player Account API is at this moment __not accessible__ for customers.
 
 [1]: http://click.pocoo.org/
+
+## What's new:
+
+Clack Version 2 brings some new features:
+
+- Colored terminal output using [pygments](http://pygments.org/).
+- Use of the newer 
 
 ## Installation
 
@@ -74,6 +82,8 @@ host = api.jwplatform.com
 description = reseller on jw platform api
 ```
 
+
+
 ## Calling the API.
 
 Assuming that you already added settings for the _ms1_ API to the config file call and marked those settings as the default, all you need to do is:
@@ -100,7 +110,9 @@ If you don't want to used stored settings you can specify all of them with flags
 clack call --api ms1 --host api.jwplatform.com --key 1q2w3e4r --secret /videos/list "{'result_limit': 10}"
 ```
 
-## Batch Calls
+
+
+### Batch Calls
 
 Clack 0.3.0 introduced a _batch_ command which allows you to make batch calls to the api with input from a csv file. The basic usage is like this.
 
@@ -125,6 +137,66 @@ clack call /accounts/update "{'account_key': 'ASDfgh', 'storage_limit': '5000000
 ```
 
 As you can see the *unused_column* is ignored.
+
+
+
+### Filter response output
+
+Clack v2 introduces the option to filter the output of responses you receive from the api. This is handy if you're interested in specific things. To use this filter you need to set the `--filter-response` (or `-f`) flag with a _"map"_ of the response you wish to see.  For example:
+
+```bash
+# Fetch key of the first video from the /videos/list response
+clack call -e ms1-account -f "videos.0.key" /videos/list
+# Or simply fetch all keys:
+clack call -e ms1-account -f "videos.*.key" /videos/list
+```
+
+
+
+### Make calls as another user
+
+Clack v2 introduces the option to make calls as another user.  You can only make calls as another user if you are authorized to use the admin endpoints of the `ac2` API.  There are three settings that need to be added to the call:
+
+1. `--as-user` or `-u` : The _"identifier"_ for the user.
+2. `--find-user-by` or `-b` : The type of _"identifier"_ you are using. Options are:
+   - `email` The user's JW Player account email.
+   - `license_key` : The JW Player user license.
+   - `ms1_key` : The MS1 API key.
+   - `analytics_token` : The token used for the analytics service.
+   - `payment_id` : Does this need explaining?
+   - `account_token` : The token for this account.
+3. `--use-ms1` : Use the ms1 api for this user. This will be done through the ac2 proxy and has some limitation, but you should be able to do most of the things you want to do for a user.
+
+Here is an example:
+
+```bash
+# List videos for an account.
+clack call -e admin-account -u someone@example.com -b email --use-ms1 /videos/list
+```
+
+
+
+### Default call parameters
+
+You can set defaults for the following call settings:
+
+- `--env` / `-e`  : The default settings to use (all your settings `clack settings ls`)
+- `--output` / `-o` : The default output format (`py`  or `json`)
+- `--color-scheme` / `-c` : The default colorscheme ([all available pygments styles](http://pygments.org/docs/styles/#getting-a-list-of-available-styles))
+- `--verbosity` / `-v` : The verbosity of the script. Default is `auto` which will be verbose when outputting to the terminal, and quiet when outputting to a file. Set to `quiet` to always be quiet and to `verbose` to always be verbose.
+
+An example:
+
+```bash
+# "Resetting" the default settings:
+clack settings defaults \
+	--env your-settings \
+	--output json \
+	--color-scheme monokai \
+	--verbosity auto
+```
+
+
 
 ## Environment Variables
 
