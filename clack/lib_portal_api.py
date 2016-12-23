@@ -1,4 +1,5 @@
 import json
+import re
 import requests
 
 
@@ -27,7 +28,6 @@ class PortalAPIError(Exception):
 
 class PortalAPI(object):
 
-    session_id = None
     verify = True
     tokens = {
         'account': None,
@@ -35,9 +35,11 @@ class PortalAPI(object):
         'user': None,
     }
 
-    def __init__(self, username=None, password=None, api_url='https://api.jwplayer.com', is_admin=False, verify=True):
+    def __init__(self, username=None, password=None, signature=None, api_url='https://api.jwplayer.com',
+                 is_admin=False, verify=True):
         self.username = username
         self.password = password
+        self.signature = signature
         self.api_url = api_url[:-1] if api_url.endswith('/') else api_url
         self.is_admin = is_admin
         self.verify = verify
@@ -47,9 +49,9 @@ class PortalAPI(object):
 
     def _call(self, method, endpoint, params=None, data=None, headers={}, auth=True, raw_response=False):
         if auth:
-            if self.session_id is None:
+            if self.signature is None:
                 self.init_session()
-            headers['Authorization'] = self.session_id
+            headers['Authorization'] = self.signature
         headers['content-type'] = 'application/json'
         resp = requests.request(
             method.upper(),
@@ -63,29 +65,28 @@ class PortalAPI(object):
             return resp
         elif resp.status_code == 200:
             resp = resp.json()
-            self.session_id = resp['return_value'].get('signature')
+            self.signature = resp['return_value'].get('signature')
             return resp['return_value']
         else:
             raise PortalAPIError(resp=resp)
 
     def _url(self, endpoint):
         endpoint = endpoint.strip('/ ')
-        if self.is_admin:
-            return '{!s}/v2/admin/{!s}/'.format(self.api_url, endpoint)
+        if not endpoint.startswith('v2/'):
+            endpoint = 'v2/' + endpoint
         # Auto replace tokens for regular user calls.
-        if self.session_id is not None:
-            for token in self.tokens:
-                endpoint = endpoint.replace('<{!s}Token>'.format(token), self.tokens[token])
-        return '{!s}/v2/{!s}/'.format(self.api_url, endpoint)
+        for search_for, name in re.findall(r'(<(\w+)>)', endpoint):
+            endpoint = (endpoint.replace(search_for, self.tokens.get(name.replace('Token', '')))).strip('/ ')
+        return '{!s}/{!s}/'.format(self.api_url, endpoint)
 
     def init_session(self):
         if self.is_admin:
-            resp = self.post('sessions', params={
+            resp = self.post('admin/sessions', params={
                 'login': self.username,
                 'password': self.password,
             }, auth=False)
             # Admin session has param in a different place.
-            self.session_id = resp['id']
+            self.signature = resp['id']
         else:
             resp = self.post('account/sessions/start', params={
                 'userEmail': self.username,

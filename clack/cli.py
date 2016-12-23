@@ -5,10 +5,11 @@ import click
 from cmd_call import CallCommands
 from cmd_settings import SettingsCommands
 from environment import COMMON_SETTINGS
+from environment import FIND_USERS_BY
 from environment import Environment
 from version import VERSION
 
-TEMP_ENV = Environment()
+env = Environment()
 
 
 # Aliased Group Class #########################################################
@@ -39,7 +40,7 @@ class AliasedGroup(click.Group):
     "to initialize a config file and to add your first settings. "
     "If you're comfortable enough you can edit the config file directly. "
     "The location of the config file is:\n{!s}".format(
-        TEMP_ENV.config_path(),
+        env.config_path(),
     )
 )
 @click.version_option(
@@ -57,18 +58,18 @@ def clack():
     help="Make api calls",
     epilog="Params are defined as a python dictionary e.g. \"{'test': True, 'foo': 'bar'}\"\n\n"
            "Color scheme options are: " + ", ".join(COMMON_SETTINGS['color_scheme']['options']) + "\n\n"
-           "Env (settings) names are: " + ", ".join(TEMP_ENV.sections),
+           "Env (settings) names are: " + ", ".join(env.sections),
 )
 @click.option(
     '--env', '-e',
     metavar="NAME",
-    type=click.Choice(TEMP_ENV.sections),
+    type=click.Choice(env.sections),
     help='Choose your api settings. See below for all available settings.',
 )
 @click.option(
     '--api', '-a',
     help='*) Set the api type.',
-    type=click.Choice(['ms1', 'ac2']),
+    type=click.Choice(['ms1', 'ac2', 'adm']),
     envvar='CLACK_API',
 )
 @click.option(
@@ -93,7 +94,7 @@ def clack():
     help="Set the HTTP method/verb (only ac2). ",
     envvar='CLACK_METHOD',
     default='post',
-    type=click.Choice(['delete', 'get', 'post', 'put'])
+    type=click.Choice(['delete', 'get', 'post', 'put']),
 )
 @click.option(
     '--csv-file', '-c',
@@ -108,6 +109,24 @@ def clack():
          "for the first key from a list of videos. You can also use videos.*.key, to get all keys for "
          "all videos in the list or use and empty string to get everything.",
     metavar="INDEX",
+)
+@click.option(
+    '--as-user', '-u',
+    help="If have ac2 admin credentials, you can find a user and makes calls as that user.",
+    metavar="USER",
+)
+@click.option(
+    '--find-user-by', '-b',
+    help="What type of input did you give for the --as-user parameter. "
+         "Default: email",
+    metavar="FIND_BY",
+    default="email",
+    type=click.Choice([o for o in FIND_USERS_BY]),
+)
+@click.option(
+    '--use-ms1',
+    help="Make calls as another user and use the MS1 api through the proxy of AC2.",
+    is_flag=True,
 )
 @click.option(
     '--output', '-o',
@@ -139,7 +158,8 @@ def clack():
 @click.argument('apicall', required=True)
 @click.argument('params', required=False)
 def call(apicall=None, params=None, *args, **kwargs):
-    return CallCommands.call(apicall, params, *args, **kwargs)
+    env.init(command="call", *args, **kwargs)
+    return CallCommands(env).call(apicall, params)
 
 clack.add_command(call)
 
@@ -160,7 +180,8 @@ clack.add_command(settings_group)
 
 @click.command('add', help="Add new API settings.")
 def settings_add(*args, **kwargs):
-    return SettingsCommands.add(*args, **kwargs)
+    env.init(*args, **kwargs)
+    return SettingsCommands.add(env)
 
 settings_group.add_command(settings_add)
 
@@ -169,7 +190,7 @@ settings_group.add_command(settings_add)
     "defaults",
     help="Set the defaults for shared settings.",
     epilog="Color scheme options are: " + ", ".join(COMMON_SETTINGS['color_scheme']['options']) + "\n\n"
-           "Env names are: " + ", ".join(TEMP_ENV.sections),
+           "Env names are: " + ", ".join(env.sections),
 )
 @click.option(
     '--color-scheme', '-c',
@@ -181,7 +202,7 @@ settings_group.add_command(settings_add)
     '--env', '-e',
     help="Set your default settings. See below for all available settings.",
     metavar="NAME",
-    type=click.Choice(TEMP_ENV.sections),
+    type=click.Choice(env.sections),
 )
 @click.option(
     '--output', '-o',
@@ -200,7 +221,8 @@ settings_group.add_command(settings_add)
     multiple=True,
 )
 def settings_defaults(*args, **kwargs):
-    return SettingsCommands.defaults(*args, **kwargs)
+    env.init(*args, **kwargs)
+    return SettingsCommands.defaults(env)
 
 settings_group.add_command(settings_defaults)
 
@@ -212,14 +234,16 @@ settings_group.add_command(settings_defaults)
     required=False,
 )
 def settings_edit(name=None, *args, **kwargs):
-    return SettingsCommands.edit(name=name, *args, **kwargs)
+    env.init(*args, **kwargs)
+    return SettingsCommands.edit(env)
 
 settings_group.add_command(settings_edit)
 
 
 @click.command("ls", help="List all API settings in the config file.")
 def settings_list(*args, **kwargs):
-    return SettingsCommands.list(*args, **kwargs)
+    env.init(*args, **kwargs)
+    return SettingsCommands.list(env)
 
 settings_group.add_command(settings_list)
 
@@ -236,7 +260,8 @@ settings_group.add_command(settings_list)
     required=False,
 )
 def settings_remove(name=None, *args, **kwargs):
-    return SettingsCommands.remove(name=name, *args, **kwargs)
+    env.init(*args, **kwargs)
+    return SettingsCommands.remove(env, name=name)
 
 settings_group.add_command(settings_remove)
 
@@ -252,7 +277,8 @@ settings_group.add_command(settings_remove)
     required=False,
 )
 def settings_set(name=None, *args, **kwargs):
-    return SettingsCommands.set(name=name, *args, **kwargs)
+    env.init(*args, **kwargs)
+    return SettingsCommands.set(env, name=name)
 
 settings_group.add_command(settings_set)
 
@@ -264,13 +290,15 @@ settings_group.add_command(settings_set)
     required=False,
 )
 def settings_show(name=None, *args, **kwargs):
-    return SettingsCommands.show(name=name, *args, **kwargs)
+    env.init(*args, **kwargs)
+    return SettingsCommands.show(env, name=name)
 
 settings_group.add_command(settings_show)
 
 
 @click.command("purge", help="Purge all settings and delete config file.")
 def settings_purge(*args, **kwargs):
-    return SettingsCommands.purge(*args, **kwargs)
+    env.init(*args, **kwargs)
+    return SettingsCommands.purge()
 
 settings_group.add_command(settings_purge)

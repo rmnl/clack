@@ -3,7 +3,6 @@ import os
 import shutil
 
 from environment import COMMON_SETTINGS
-from environment import Environment
 
 
 class SettingsCommands(object):
@@ -20,8 +19,7 @@ class SettingsCommands(object):
         return name
 
     @staticmethod
-    def add(*args, **kwargs):
-        env = Environment(*args, **kwargs)
+    def add(env):
         env.check()
         env.echo('Answer the following questions to add a new set of API settings.')
         env.edit()
@@ -29,21 +27,18 @@ class SettingsCommands(object):
         env.echo("Done.")
 
     @staticmethod
-    def edit(name=None, *args, **kwargs):
-        env = Environment(*args, **kwargs)
+    def edit(env, name=None):
         name = SettingsCommands._get_and_check_name(env, name, 'edit')
         env.edit(update_for_name=name)
         env.save()
         env.echo("Done.")
 
     @staticmethod
-    def list(*args, **kwargs):
-        env = Environment(*args, **kwargs)
+    def list(env):
         env.list()
 
     @staticmethod
-    def remove(name=None, *args, **kwargs):
-        env = Environment(*args, **kwargs)
+    def remove(env, name=None):
         name = SettingsCommands._get_and_check_name(env, name, 'remove')
         if not env.options.yes and not click.confirm('Are you sure you want to remove "{!s}"?'.format(name)):
             env.abort('OK.', error=False)
@@ -57,23 +52,20 @@ class SettingsCommands(object):
         return
 
     @staticmethod
-    def set(name=None, *args, **kwargs):
-        env = Environment(*args, **kwargs)
+    def set(env, name=None):
         name = SettingsCommands._get_and_check_name(env, name, 'set as the default settings')
         env.set('etc', 'env', name)
         env.save()
         env.echo("{!s} has been set as the default.".format(name))
 
     @staticmethod
-    def show(name=None, *args, **kwargs):
-        env = Environment(*args, **kwargs)
+    def show(env, name=None):
         name = SettingsCommands._get_and_check_name(env, name, 'show')
         env.echo("These are the settings for \"{!s}\":".format(name))
         env.api_settings(name)
 
     @staticmethod
-    def defaults(*args, **kwargs):
-        env = Environment(*args, **kwargs)
+    def defaults(env):
         updated = False
         for opt in env.options.reset:
             opt = opt.replace('-', '_')
@@ -101,8 +93,7 @@ class SettingsCommands(object):
         env.echo(env.colorize(env.create_table(table_data)))
 
     @staticmethod
-    def purge(*args, **kwargs):
-        env = Environment(*args, **kwargs)
+    def purge(env):
         env.echo("You are about to delete all your API settings.")
         if not click.confirm("Are you sure?"):
             return env.abort("Ok.", error=False)
