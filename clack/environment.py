@@ -5,6 +5,7 @@ import json
 import os
 import pprint
 import re
+import subprocess
 import sys
 
 from distutils.version import StrictVersion
@@ -47,9 +48,37 @@ COMMON_SETTINGS = {
 
 OUTPUT_OPTIONS = ['json', 'py']
 
+FIND_USERS_BY = {
+    'email': {
+        'search_param': 'email',
+        'belongs_to': 'user',
+    },
+    'license_key': {
+        'search_param': 'licenseKey',
+        'belongs_to': 'nothing',  # Actually to property, but we cannot decode it in this script.
+    },
+    'payment_id': {
+        'search_param': 'paymentID',
+        'belongs_to': 'account',
+    },
+    'account_token': {
+        'search_param': 'accountToken',
+        'belongs_to': 'account',
+    },
+    'analytics_token': {
+        'search_param': 'analyticsToken',
+        'belongs_to': 'property',
+    },
+    'ms1_key': {
+        'search_param': 'msAccountKey',
+        'belongs_to': 'property',
+    },
+}
+
 API_DEFAULT_HOSTS = {
-    'ms1': 'api.jwplatform.com',
-    'ac2': 'api.jwplayer.com',
+    'ms1': 'https://api.jwplatform.com',
+    'ac2': 'https://api.jwplayer.com',
+    'adm': 'https://api.jwplayer.com',
 }
 
 STYLES = {
@@ -85,12 +114,16 @@ class Environment(object):
     term_colors = 256
     term_width, term_height = click.get_terminal_size()
 
-    def __init__(self, command="settings", *args, **kwargs):
-        self.command = command
-        # Initialize the config and the options
-        self.options = Options(**kwargs)
+    def __init__(self):
+        # Initialize the config
         self.config = ConfigParser.RawConfigParser(allow_no_value=True)
         self.config.read([Environment.config_path()])
+
+    # We have second init method, because we want to be able to use this class
+    # without full initialization.
+    def init(self, command="settings", *args, **kwargs):
+        self.command = command
+        self.options = Options(**kwargs)
         # Determine if we need to be verbose or not:
         self.verbose = True
         if not self.command == 'settings' and self.stdout_isatty and self.verbosity == 'quiet':
@@ -231,6 +264,11 @@ class Environment(object):
         os.mkdir(path)
         return None
 
+    # VPN Check
+    def has_vpn_access(self):
+        success, out = execute(['ping', '-c', 1, '-t', 3, 'admin.longtailvideo.com'])
+        return success
+
     # Keyring management
 
     def _keyring_id(self, section_name):
@@ -261,7 +299,7 @@ class Environment(object):
 
     def abort(self, msg, error=True):
         if error:
-            self.echo("Error:", style='error', force=True)
+            self.echo("Error:", style='error', force=True, err=True)
         self.echo(msg, force=True)
         self.echo('Aborting.', force=True)
         sys.exit(1)
@@ -309,7 +347,6 @@ class Environment(object):
             columns.insert(0, headers)
         lines = ["", ]
         for left, right in columns:
-            right = "********" if left == 'secret' else right
             lines.append(("{:<" + str(max_length + 1) + "}{!s} {!s}").format(left, div, right))
         lines.append("")
         return lines
@@ -393,11 +430,17 @@ class Environment(object):
             api = self.validated_input(
                 "What type of API is this?\n"
                 "- ms1 : media services api (aka botr, jwplatform)\n"
-                "- ac2 : account api version 2 (as used by unified dashboard)\n",
+                "- ac2 : account api version 2 (as used by unified dashboard)\n"
+                "- adm : admin api, only available inside JW's VPN network\n",
                 default=None,
-                options=['ms1', 'ac2'],
+                options=['ms1', 'ac2', 'adm'],
                 error_msg='Please choose a valid option and try again',
             )
+            if api == 'adm':
+                click.echo('Hold on please. Checking VPN access.')
+                if not self.has_vpn_access():
+                    self.abort('No VPN access: Please enable the VPN and try again.')
+
             host = API_DEFAULT_HOSTS[api]
             key = None
             description = None
@@ -415,23 +458,10 @@ class Environment(object):
         )
         verify_ssl = 'yes'
         if host.startswith('https://') and not click.confirm(
-            'You have defined a https host. Do you wish to verify the SSL certificates'
+            'You have defined a https host. Do you wish to verify the SSL certificates?'
         ):
             verify_ssl = 'no'
-        if api == 'ac2':
-            key = self.validated_input("What's the login/email for the user?", default=key)
-            secret = self.validated_input(
-                "What's the password? Please note that the password is stored in your system's keyring. "
-                "You can also leave it empty and you will be prompted for your password with each api call",
-                default="",
-                hide_input=True,
-            )
-            is_admin = 'no'
-            if key.find('@') < 0 and click.confirm(
-                'Did you just enter credentials for making admin calls to the account api?'
-            ):
-                is_admin = 'yes'
-        else:
+        if api == 'ms1':
             key = self.validated_input(
                 "What's the API key for this user",
                 default=key,
@@ -448,6 +478,15 @@ class Environment(object):
                           "Please try again",
                 hide_input=True,
             )
+        else:
+            key = self.validated_input("What's the login/email for the user?", default=key)
+            secret = self.validated_input(
+                "What's the password? Please note that the password is stored in your system's keyring. "
+                "You can also leave it empty and you will be prompted for your password with each api call",
+                default="",
+                hide_input=True,
+            )
+        description = "{!s} on {!s}".format(key, host) if description is None else description
         description = self.validated_input(
             "You can add a description to make it easier to identify this set of api settings.",
             default=description,
@@ -458,8 +497,6 @@ class Environment(object):
             self.set(name, 'description', description)
             self.set(name, 'api', api)
             self.set(name, 'verify_ssl', verify_ssl)
-            if api == 'ac2':
-                self.set(name, 'is_admin', is_admin)
         if name and key and secret:
             self.set_secret(name, key, secret)
         elif name and key and self.get_secret(name, key):
@@ -573,3 +610,28 @@ class TableLexer(lexer.RegexLexer):
             ))
         ]
     }
+
+
+def execute(command_list):
+    """ Executes commands on the command line.
+        Returns tuple with the result True|False and
+        the output that the command generated.
+    """
+    try:
+        command = [
+            c if isinstance(c, basestring) else str(c) for c in command_list
+        ]
+        proc = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        out, err = proc.communicate()
+        if proc.returncode:
+            return False, err
+        return True, out
+    except OSError, e:
+        if e[0] == 2:  # No such file or directory
+            return False, '"%s" is not available on your system.' % command[0]
+        else:
+            raise e
