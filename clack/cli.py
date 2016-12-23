@@ -125,7 +125,7 @@ def clack():
 )
 @click.option(
     '--use-ms1',
-    help="Make calls as another user and use the MS1 api instead of the AC2 api",
+    help="Make calls as another user and use the MS1 api through the proxy of AC2.",
     is_flag=True,
 )
 @click.option(
