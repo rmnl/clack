@@ -125,7 +125,7 @@ def clack():
     type=click.Choice([o for o in FIND_USERS_BY]),
 )
 @click.option(
-    '--use-ms1',
+    '-1', '--use-ms1',
     help="Make calls as another user and use the MS1 api through the proxy of AC2.",
     is_flag=True,
 )
