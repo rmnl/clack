@@ -139,6 +139,7 @@ class CallCommands(object):
             protocol, self.host = self.host.split('://')
         ms1_api = jwplatform.Client(self.key, self.secret, host=self.host, scheme=protocol, agent='clack')
         try:
+            params = {} if params is None else params
             resp = getattr(ms1_api, endpoint.replace('/', '.'))(**params)
             return True, resp
         except jwplatform.errors.JWPlatformError as e:
@@ -236,7 +237,7 @@ class CallCommands(object):
         """
         # Exceptional case:
         if self.env.options.filter_response == "":
-            return resp
+            return True, resp
         # Cleanup keymap and find integers
         if keymap is None:
             keymap = self.env.options.filter_response.split(".")
@@ -250,17 +251,17 @@ class CallCommands(object):
         # Find the return value
         for i, key in enumerate(keymap, start=1):
             if key == "*" and isinstance(resp, (list, tuple)):
-                return [self._filter_response(j, keymap=keymap[i:]) for j in resp]
+                return True, [self._filter_response(j, keymap=keymap[i:])[1] for j in resp]
             elif isinstance(key, basestring) and isinstance(resp, dict) and resp.get(key) is not None:
                 resp = resp.get(key)
             elif isinstance(key, int) and isinstance(resp, (list, tuple)) and len(resp) > key:
                 resp = resp[key]
             else:
-                return "Error filtering {} at {}".format(
+                return False, "Error filtering {} at {}".format(
                     ".".join(["{!s}".format(j) for j in keymap]),
                     ".".join(["{!s}".format(j) for j in keymap[:i]])
                 )
-        return resp
+        return True, resp
 
     def _single_call(self, call_method, endpoint, params_str):
         params = self._parse_params(params_str)
@@ -274,8 +275,12 @@ class CallCommands(object):
             if hasattr(resp, 'json'):
                 resp = resp.json()
             if self.env.options.filter_response:
-                resp = self._filter_response(resp)
+                success, resp = self._filter_response(resp)
                 title = "Filtered " + title
+                if not success:
+                    self.env.echo("Filter Error:", style="error", err=True)
+                    self.env.echo(resp, err=True)
+                    return None
             self.env.echo(title, style="heading")
             self.env.output_response(resp)
         else:
@@ -312,7 +317,7 @@ class CallCommands(object):
                     call_endpoint = (endpoint.replace(search_for, values.get(name))).strip('/ ')
                 success, resp = call_method(call_endpoint, call_params)
                 if success and self.env.options.filter_response:
-                    results[columns[0]] = self._filter_response(resp)
+                    results[columns[0]] = self._filter_response(resp)[1]
                 elif success:
                     results[columns[0]] = "success"
                 else:
@@ -333,7 +338,7 @@ class CallCommands(object):
 
         # Format the endpoint nicely
         endpoint = endpoint.strip('/ ')
-        if not endpoint.startswith('v2/'):
+        if not self.api == 'ms1' and not endpoint.startswith('v2/'):
             endpoint = 'v2/' + endpoint
         if self.api == 'adm' and not endpoint.startswith('v2/admin/'):
             endpoint = 'v2/admin/' + endpoint[3:]
