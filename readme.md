@@ -34,6 +34,11 @@ Starting with version 0.3.0 Clack supports installation through pip. This gives 
 pip install --upgrade clack-cli
 ```
 
+Please note for pre-releases you must specify the exact version. E.g.:
+
+```bash
+pip install --upgrade clack-cli==2.0.0b9
+```
 
 
 ## Usage

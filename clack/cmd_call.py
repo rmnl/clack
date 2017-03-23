@@ -310,7 +310,7 @@ class CallCommands(object):
                     values[header_row[i]] = val
                 call_params = params_str
                 for search_for, name in re.findall(r'(<<(\w+)>>)', params_str):
-                    call_params = params_str.replace(search_for, values.get(name))
+                    call_params = call_params.replace(search_for, values.get(name))
                 call_params = self._parse_params(call_params)
                 call_endpoint = endpoint
                 for search_for, name in re.findall(r'(<<(\w+)>>)', endpoint):
