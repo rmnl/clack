@@ -1,6 +1,6 @@
 # CLACK
 
-Clack is a Command Line API Calling Kit based on [Click][1].
+Clack is a Command Line API Calling Kit based on [Click](http://click.pocoo.org/).
 
 Clack is no longer maintained but the code is still available here and [on GitLab](https://gitlab.com/rmnl/clack).
 
